@@ -1,3 +1,2 @@
-declare function Twout(): any;
-
+declare const Twout: any;
 export default Twout;
