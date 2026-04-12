@@ -63,6 +63,13 @@ npm install marcosrego-web/twout
 yarn add marcosrego-web/twout
 ```
 
+#### Using external `<script>` in HTML `<head>` (not recommended)
+
+```html
+<script src="https://raw.githubusercontent.com/marcosrego-web/twout/refs/heads/master/index.js"></script>
+```
+⚠️ This method is **not recommended for production**, since Twout should ideally be used in a system that caches the output.
+
 ---
 
 ## 🧩 Import & Usage
@@ -87,7 +94,7 @@ const css = Twout(classes);
 ### In Vanilla JavaScript
 
 ```js
-import Twout from "./twout.js";
+import Twout from "./twout/index.js";
 
 const css = Twout(["text-center", "mt-4"]);
 console.log(css);
@@ -95,14 +102,10 @@ console.log(css);
 
 ---
 
-### Using `<script>` in HTML (not recommended)
-
-You can also load it directly:
+### In HTML after adding the script to `<head>` (not recommended)
 
 ```html
-<script type="module">
-  import Twout from "https://raw.githubusercontent.com/marcosrego-web/twout/refs/heads/master/index.js";
-
+<script>
   const css = Twout(["grid", "gap-4"]);
   console.log(css);
 </script>
