@@ -101,7 +101,7 @@ You can also load it directly:
 
 ```html
 <script type="module">
-  import Twout from "https://raw.githubusercontent.com/marcosrego-web/twout/refs/heads/master/dist/index.js";
+  import Twout from "https://raw.githubusercontent.com/marcosrego-web/twout/refs/heads/master/index.js";
 
   const css = Twout(["grid", "gap-4"]);
   console.log(css);
