@@ -1,2 +1,2 @@
-declare const Twout: any;
+declare function Twout(classes: string[]): string;
 export default Twout;
