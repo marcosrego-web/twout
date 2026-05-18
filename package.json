@@ -1,6 +1,16 @@
 {
   "name": "twout",
   "version": "1.0.0",
+  "description": "Get Tailwind Classes Output for page by page use cases, to cache or use during static files generation.",
   "main": "./index.js",
-  "types": "./index.d.ts"
+  "types": "./index.d.ts",
+  "license": "MIT",
+  "keywords": ["tailwind", "css", "utility", "output", "dynamic"],
+  "author": "marcosrego-web",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marcosrego-web/twout.git"
+  },
+  "homepage": "https://github.com/marcosrego-web/twout#readme",
+  "files": ["index.js", "index.d.ts"]
 }
