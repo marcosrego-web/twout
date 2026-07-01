@@ -584,8 +584,14 @@ const handlers = [
     const sizeToken = token => {
       if (token === "auto") return "auto"
       if (token === "full") return "100%"
-      if (b.includes("w-") && token === "screen") return "100vw"
-      if (token === "screen") return "100vh"
+      if (token === "min" || token === "max" || token === "fit") return token+'-content'
+      if (token === "screen") return b.includes("w-") ? "100vw" : "100vh"
+      if (token === "vw") return "100vw"
+      if (token === "dvw") return "100dvw"
+      if (token === "dvh") return "100dvh"
+      if (token === "lvw") return "100lvw"
+      if (token === "lvh") return "100lvh"
+      if (token === "svw") return "100svw"
       if (token.startsWith("(")) return toVarRef(getArbitrary(b, "("))
       if (token.startsWith("[")) return getArbitrary(b, "[")
       const frac = fracToPercent(token)
@@ -593,7 +599,7 @@ const handlers = [
       if (spacing[token]) return spacing[token]
       return token
     }
-    const m = b.match(/^(w|h|min-w|min-h|max-w|max-h)-(.*)$/)
+    const m = b.match(/^(min-w|min-h|max-w|max-h|inline|block|w|h)-(.*)$/)
     if (!m) return ""
     const [, prop, token] = m
     const cssProp = prop
@@ -603,6 +609,8 @@ const handlers = [
       .replace(/^min-h$/, "min-height")
       .replace(/^max-w$/, "max-width")
       .replace(/^max-h$/, "max-height")
+      .replace(/^inline$/, "inline-size")
+      .replace(/^block$/, "block-size")
     return apply(cssProp, sizeToken(token))
   },
 
@@ -623,6 +631,10 @@ const handlers = [
       ) {
         // Text align
         return "text-align:" + b.replace("text-", "") + ";"
+      } else if (token.startsWith("(") && hasNumValue(getArbitrary(b, "("))) {
+        return `font-size:${toVarRef(getArbitrary(b, "("))};`
+      } else if (token.startsWith("[") && hasNumValue(getArbitrary(b, "["))) {
+        return `font-size:${getArbitrary(b, "[")};`
       } else if (hasNumValue(token)) {
         const prop = "font-size"
         const entry = textSizes[token]
@@ -630,9 +642,6 @@ const handlers = [
           const lh = entry.lh ? `line-height:${entry.lh};` : ""
           return prop + `:${entry.fs};${lh}`
         }
-        if (token.startsWith("("))
-          return prop + `:${toVarRef(getArbitrary(b, "("))};`
-        if (token.startsWith("[")) return prop + `:${getArbitrary(b, "[")};`
         return ""
       }
     }
