@@ -49,21 +49,19 @@ Instead, it’s designed for:
 
 ## 📦 Installation
 
-### Install from GitHub
-
-#### Using npm
+### Using npm
 
 ```bash
 npm install marcosrego-web/twout
 ```
 
-#### Using yarn
+### Using yarn
 
 ```bash
 yarn add marcosrego-web/twout
 ```
 
-#### Using external `<script>` in HTML `<head>` (not recommended)
+### Using external `<script>` from Github in HTML `<head>` (not recommended)
 
 ```html
 <script src="https://raw.githubusercontent.com/marcosrego-web/twout/refs/heads/master/index.js"></script>
