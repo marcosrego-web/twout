@@ -792,6 +792,16 @@ const handlers = [
     return ""
   },
 
+  b =>
+    ({
+      "break-normal": "word-break:normal;",
+      "break-all": "word-break:break-all;",
+      "break-keep": "word-break:keep-all;",
+      "wrap-break-word": "overflow-wrap:break-word;",
+      "wrap-anywhere": "overflow-wrap:anywhere;",
+      "wrap-normal": "overflow-wrap:normal;",
+    }[b] || ""),
+
   // COLORS
 
   b =>
