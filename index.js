@@ -205,7 +205,7 @@ const wrapVariants = (selector, rule, variants) => {
   let sel = selector
 
   variants.forEach(v => {
-    if (v in breakpoints) {
+    if (v in breakpoints || v === "dark") {
       media.push(v)
     } else if (pseudoMap[v]) {
       sel += pseudoMap[v]
@@ -234,7 +234,11 @@ const wrapVariants = (selector, rule, variants) => {
 
   let css = `${sel}{${rule}}`
   media.reverse().forEach(v => {
-    css = `@media (min-width:${breakpoints[v]}){${css}}`
+    if (v === "dark") {
+      css = `@media (prefers-color-scheme:dark){${css}}`
+    } else {
+      css = `@media (min-width:${breakpoints[v]}){${css}}`
+    }
   })
   return css
 }
