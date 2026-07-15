@@ -1,6 +1,6 @@
 {
   "name": "twout",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "description": "Get Tailwind Classes Output for page by page use cases, to cache or use during static files generation.",
   "main": "./index.js",
   "types": "./index.d.ts",
