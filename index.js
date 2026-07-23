@@ -1082,6 +1082,7 @@ const handlers = [
 
   b =>
     ({
+      "all-unset": "all:unset;",
       "all-inherit": "all:inherit;",
       "all-initial": "all:initial;",
       "all-revert": "all:revert;",
