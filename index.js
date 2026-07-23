@@ -1069,6 +1069,17 @@ const handlers = [
       "wrap-normal": "overflow-wrap:normal;",
     }[b] || ""),
 
+  // MISC (not in Tailwind)
+
+  b =>
+    ({
+      "all-inherit": "all:inherit;",
+      "all-initial": "all:initial;",
+      "all-revert": "all:revert;",
+      "all-revert-layer": "all:revert-layer;",
+      "all-revert-rule": "all:revert-rule;"
+    }[b] || ""),
+
   // COLORS
 
   b =>
