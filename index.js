@@ -506,27 +506,36 @@ const wrapVariants = (selector, rule, variants) => {
   return css
 }
 
+function negateValue(value) {
+  value = value.trim()
+
+  // If already negative, leave it
+  if (value.startsWith("-")) return value
+
+  // If var() → wrap in calc()
+  if (value.startsWith("var(")) return `calc(${value} * -1)`
+
+  // If numeric/length → prefix minus
+  if (/^\d*\.?\d+(px|rem|em|%|vh|vw|deg)?$/.test(value)) {
+    return `-${value}`
+  }
+
+  // Function call (e.g. rotate(45deg), translateX(1rem), scaleX(0.5)) → negate the inner value
+  const fn = value.match(/^([a-zA-Z][\w-]*)\((.*)\)$/)
+  if (fn) {
+    const [, name, inner] = fn
+    return `${name}(${negateValue(inner)})`
+  }
+
+  return value // fallback
+}
+
 function applyFlag(rule, isNegative, isImportant) {
   let out = rule
 
   // Handle negative values
   if (isNegative) {
-    out = out.replace(/:(.*?);/g, (_, value) => {
-      value = value.trim()
-
-      // If already negative, leave it
-      if (value.startsWith("-")) return `:${value};`
-
-      // If var() → wrap in calc()
-      if (value.startsWith("var(")) return `:calc(${value} * -1);`
-
-      // If numeric/length → prefix minus
-      if (/^\d*\.?\d+(px|rem|em|%|vh|vw|deg)?$/.test(value)) {
-        return `:-${value};`
-      }
-
-      return `:${value};` // fallback
-    })
+    out = out.replace(/:(.*?);/g, (_, value) => `:${negateValue(value)};`)
   }
 
   // Handle !important
@@ -1420,6 +1429,19 @@ const handlers = [
         right: "right"
       }
       return `perspective-origin:${map[m[1]] || m[1]};`
+    }
+
+    // Rotate (axis-specific: rotate-x-, rotate-y-, rotate-z-)
+    m = b.match(/^rotate-([xyz])-(-?.+)$/)
+    if (m) {
+      const prop = "transform"
+      const fn = "rotate" + m[1].toUpperCase()
+      const token = m[2]
+      let val
+      if (token.startsWith("(")) val = toVarRef(getArbitrary(b, "("))
+      else if (token.startsWith("[")) val = getArbitrary(b, "[")
+      else val = token + "deg"
+      return `-webkit-${prop}:${fn}(${val});-ms-${prop}:${fn}(${val});${prop}:${fn}(${val});`
     }
 
     // Rotate
