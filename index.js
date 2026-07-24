@@ -487,9 +487,9 @@ const wrapVariants = (selector, rule, variants) => {
     } else if (v.startsWith("not-[")) {
       const inner = v.substring(v.indexOf("[") + 1, v.lastIndexOf("]"))
       sel += `:not(${inner})`
-    } else if (v.startsWith("[&")) {
+    } else if (v.startsWith("[") && v.includes("&")) {
       const inner = v.substring(v.indexOf("[") + 1, v.lastIndexOf("]"))
-      sel += inner
+      sel = inner.replaceAll("&", sel)
     } else {
       sel += `:${v}` // fallback (keeps original behavior)
     }
