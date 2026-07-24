@@ -712,6 +712,14 @@ const handlers = [
       hidden: "display:none;"
     }[b] || ""),
 
+  // visibility
+  b =>
+    ({
+      visible: "visibility:visible;",
+      invisible: "visibility:hidden;",
+      collapse: "visibility:collapse;"
+    }[b] || ""),
+
   // position + float
   b =>
     ({
