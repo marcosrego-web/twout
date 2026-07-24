@@ -374,10 +374,49 @@ const opacityToDec = n => {
   return Math.max(0, Math.min(100, v)) / 100 + ""
 }
 
+function decodeArbitraryValue(value) {
+  let out = ""
+  let i = 0
+  while (i < value.length) {
+    if (value.startsWith("url(", i)) {
+      const start = i
+      let depth = 0
+      let j = i
+      for (; j < value.length; j++) {
+        if (value[j] === "(") depth++
+        else if (value[j] === ")") {
+          depth--
+          if (depth === 0) {
+            j++
+            break
+          }
+        }
+      }
+      out += value.slice(start, j)
+      i = j
+      continue
+    }
+    if (value[i] === "\\" && value[i + 1] === "_") {
+      out += "_"
+      i += 2
+      continue
+    }
+    if (value[i] === "_") {
+      out += " "
+      i += 1
+      continue
+    }
+    out += value[i]
+    i += 1
+  }
+  return out
+}
+
 const getArbitrary = (cls, bracket) => {
   const re = bracket === "[" ? /\[(.*?)\]/ : /\((.*?)\)/
   const m = cls.match(re)
-  return m?.[1] ?? null
+  if (m?.[1] == null) return null
+  return bracket === "[" ? decodeArbitraryValue(m[1]) : m[1]
 }
 
 const toVarRef = token =>
@@ -463,6 +502,14 @@ function hasNumValue(token = "") {
   return false
 }
 
+function resolveRelativeAmpersand(inner) {
+  if (!inner.includes("&")) return inner
+  return inner.replace(/&/g, (_, offset, str) => {
+    const next = str[offset + 1]
+    return next && /[.:#\[a-zA-Z_-]/.test(next) ? "" : "*"
+  })
+}
+
 const wrapVariants = (selector, rule, variants) => {
   const media = []
   let sel = selector
@@ -479,16 +526,16 @@ const wrapVariants = (selector, rule, variants) => {
       const n = v.match(/^nth-last-(\d+)$/)[1]
       sel += `:nth-last-child(${n})`
     } else if (v.startsWith("has-[")) {
-      const inner = v.substring(v.indexOf("[") + 1, v.lastIndexOf("]"))
-      sel += `:has(${inner})`
+      const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+      sel += `:has(${resolveRelativeAmpersand(inner)})`
     } else if (v.startsWith("is-[")) {
-      const inner = v.substring(v.indexOf("[") + 1, v.lastIndexOf("]"))
-      sel += `:is(${inner})`
+      const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+      sel += `:is(${resolveRelativeAmpersand(inner)})`
     } else if (v.startsWith("not-[")) {
-      const inner = v.substring(v.indexOf("[") + 1, v.lastIndexOf("]"))
-      sel += `:not(${inner})`
+      const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+      sel += `:not(${resolveRelativeAmpersand(inner)})`
     } else if (v.startsWith("[") && v.includes("&")) {
-      const inner = v.substring(v.indexOf("[") + 1, v.lastIndexOf("]"))
+      const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
       sel = inner.replaceAll("&", sel)
     } else {
       sel += `:${v}` // fallback (keeps original behavior)
@@ -1076,18 +1123,6 @@ const handlers = [
       "wrap-break-word": "overflow-wrap:break-word;",
       "wrap-anywhere": "overflow-wrap:anywhere;",
       "wrap-normal": "overflow-wrap:normal;",
-    }[b] || ""),
-
-  // MISC (not in Tailwind)
-
-  b =>
-    ({
-      "all-unset": "all:unset;",
-      "all-inherit": "all:inherit;",
-      "all-initial": "all:initial;",
-      "all-revert": "all:revert;",
-      "all-revert-layer": "all:revert-layer;",
-      "all-revert-rule": "all:revert-rule;"
     }[b] || ""),
 
   // COLORS
