@@ -510,11 +510,30 @@ function resolveRelativeAmpersand(inner) {
   })
 }
 
+function bracketVariantFragment(v) {
+  if (v.startsWith("has-[")) {
+    const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+    return `:has(${resolveRelativeAmpersand(inner)})`
+  }
+  if (v.startsWith("is-[")) {
+    const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+    return `:is(${resolveRelativeAmpersand(inner)})`
+  }
+  if (v.startsWith("not-[")) {
+    const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+    return `:not(${resolveRelativeAmpersand(inner)})`
+  }
+  return null
+}
+
 const wrapVariants = (selector, rule, variants) => {
   const media = []
   let sel = selector
 
   variants.forEach(v => {
+    const fragment = bracketVariantFragment(v)
+    const notFragment = !fragment && v.startsWith("not-") ? bracketVariantFragment(v.slice(4)) : null
+
     if (v in breakpoints || v === "dark") {
       media.push(v)
     } else if (pseudoMap[v]) {
@@ -525,15 +544,10 @@ const wrapVariants = (selector, rule, variants) => {
     } else if (/^nth-last-(\d+)$/.test(v)) {
       const n = v.match(/^nth-last-(\d+)$/)[1]
       sel += `:nth-last-child(${n})`
-    } else if (v.startsWith("has-[")) {
-      const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
-      sel += `:has(${resolveRelativeAmpersand(inner)})`
-    } else if (v.startsWith("is-[")) {
-      const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
-      sel += `:is(${resolveRelativeAmpersand(inner)})`
-    } else if (v.startsWith("not-[")) {
-      const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
-      sel += `:not(${resolveRelativeAmpersand(inner)})`
+    } else if (fragment) {
+      sel += fragment
+    } else if (notFragment) {
+      sel += `:not(${notFragment})`
     } else if (v.startsWith("[") && v.includes("&")) {
       const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
       sel = inner.replaceAll("&", sel)
