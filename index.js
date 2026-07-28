@@ -1680,14 +1680,11 @@ const handlers = [
     if (m) {
       const prop = "filter"
       const token = m[1] ?? "100"
-      const declaration = (m[0] == "drop" || b.startsWith("drop-shadow")
+      const declaration = b.startsWith("drop-shadow")
         ? "drop-shadow"
-        : m[0] == "hue" || b.startsWith("hue-rotate")
+        : b.startsWith("hue-rotate")
         ? "hue-rotate"
-        : m[0]
-      )
-        .replace(token, "")
-        .replace("-", "")
+        : m[0].replace(token, "").replace("-", "")
       if (declaration) {
         if (token.startsWith("("))
           return (
