@@ -1394,6 +1394,33 @@ const handlers = [
     )};`
   },
 
+  // mix-blend-mode
+  b => {
+    const m = b.match(/^mix-blend-(.+)$/)
+    if (!m) return ""
+    const values = [
+      "normal",
+      "multiply",
+      "screen",
+      "overlay",
+      "darken",
+      "lighten",
+      "color-dodge",
+      "color-burn",
+      "hard-light",
+      "soft-light",
+      "difference",
+      "exclusion",
+      "hue",
+      "saturation",
+      "color",
+      "luminosity",
+      "plus-darker",
+      "plus-lighter"
+    ]
+    return values.includes(m[1]) ? `mix-blend-mode:${m[1]};` : ""
+  },
+
   //TRANSITIONS & ANIMATION
 
   //property and behaviour
