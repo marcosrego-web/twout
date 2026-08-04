@@ -454,26 +454,7 @@ const pseudoMap = {
   enabled: ":enabled",
   checked: ":checked",
   "*": " > *",
-  "**": " *",
-  //Temporary way of doing :not()
-  "not-focus": ":not(:focus)",
-  "not-focus-within": ":not(:focus-within)",
-  "not-focus-visible": ":not(:focus-visible)",
-  "not-active": ":not(:active)",
-  "not-visited": ":not(:visited)",
-  "not-target": ":not(:target)",
-  "not-only": ":not(:only-child)",
-  "not-first": ":not(:first-child)",
-  "not-last": ":not(:last-child)",
-  "not-odd": ":not(:nth-child(odd))",
-  "not-even": ":not(:nth-child(even))",
-  "not-first-of-type": ":not(:first-of-type)",
-  "not-last-of-type": ":not(:last-of-type)",
-  "not-only-of-type": ":not(:only-of-type)",
-  "not-empty": ":not(:empty)",
-  "not-disabled": ":not(:disabled)",
-  "not-enabled": ":not(:enabled)",
-  "not-checked": ":not(:checked)"
+  "**": " *"
 } //Some are missing //Check: https://tailwindcss.com/docs/hover-focus-and-other-states#pseudo-class-reference
 
 function hasNumValue(token = "") {
@@ -532,7 +513,14 @@ const wrapVariants = (selector, rule, variants) => {
 
   variants.forEach(v => {
     const fragment = bracketVariantFragment(v)
-    const notFragment = !fragment && v.startsWith("not-") ? bracketVariantFragment(v.slice(4)) : null
+    const notPseudo = pseudoMap[v.slice(4)]
+    const notFragment =
+      !fragment && v.startsWith("not-")
+        ? bracketVariantFragment(v.slice(4)) ||
+          (notPseudo && notPseudo.startsWith(":") && !notPseudo.startsWith("::")
+            ? notPseudo
+            : null)
+        : null
 
     if (v in breakpoints || v === "dark") {
       media.push(v)
@@ -585,7 +573,8 @@ function negateValue(value) {
   const fn = value.match(/^([a-zA-Z][\w-]*)\((.*)\)$/)
   if (fn) {
     const [, name, inner] = fn
-    return `${name}(${negateValue(inner)})`
+    const args = inner.split(",").map(a => negateValue(a.trim())).join(",")
+    return `${name}(${args})`
   }
 
   return value // fallback
@@ -1155,6 +1144,9 @@ const handlers = [
       "bg-contain": "background-size:contain;",
       "bg-no-repeat": "background-repeat:no-repeat;",
       "bg-repeat": "background-repeat:repeat;",
+      "bg-fixed": "background-attachment:fixed;",
+      "bg-local": "background-attachment:local;",
+      "bg-scroll": "background-attachment:scroll;",
       "bg-top-left": "background-position:top left;",
       "bg-top": "background-position:top;",
       "bg-top-right": "background-position:top right;",
@@ -1175,42 +1167,42 @@ const handlers = [
     const pa = getArbitrary(b, "(")
 
     if (b.startsWith("bg-position")) {
-      if (pa) return `background-position:${toVarRef(pa)};`
       if (sq) return `background-position:${colorValue(sq)};`
+      if (pa) return `background-position:${toVarRef(pa)};`
     } else if (b.startsWith("bg-size")) {
-      if (pa) return `background-size:${toVarRef(pa)};`
       if (sq) return `background-size:${colorValue(sq)};`
+      if (pa) return `background-size:${toVarRef(pa)};`
     } else if (b.startsWith("bg-linear")) {
+      if (sq)
+        return `background-image:linear-gradient(${getArbitrary(b, "[")});`
       if (pa)
         return `background-image:linear-gradient(${toVarRef(
           pa.replace("image:", "")
         )});`
-      if (sq)
-        return `background-image:linear-gradient(${getArbitrary(b, "[")});`
     } else if (b.startsWith("bg-radial")) {
+      if (sq)
+        return `background-image:radial-gradient(${getArbitrary(b, "[")});`
       if (pa)
         return `background-image:radial-gradient(${toVarRef(
           pa.replace("image:", "")
         )});`
-      if (sq)
-        return `background-image:radial-gradient(${getArbitrary(b, "[")});`
     } else if (b.startsWith("bg-conic")) {
+      if (sq) return `background-image:conic-gradient(${getArbitrary(b, "[")});`
       if (pa)
         return `background-image:conic-gradient(${toVarRef(
           pa.replace("image:", "")
         )});`
-      if (sq) return `background-image:conic-gradient(${getArbitrary(b, "[")});`
       // <angle>, "from" and "to" are missing
     } else if (b.startsWith("bg-")) {
       //Images
       if (b === "bg-none") return "background:none;background-image:none;"
-      if (pa && b.includes("image:"))
-        return `background-image:${toVarRef(pa.replace("image:", ""))};`
       if (sq && b.includes("url("))
         return `background-image:${getArbitrary(b, "[")};`
+      if (pa && b.includes("image:"))
+        return `background-image:${toVarRef(pa.replace("image:", ""))};`
       //Colors
-      if (pa) return `background-color:${toVarRef(pa)};`
       if (sq) return `background-color:${colorValue(sq)};`
+      if (pa) return `background-color:${toVarRef(pa)};`
       return `background-color:${colorValue(b.slice(3))};`
     }
 
@@ -1227,8 +1219,8 @@ const handlers = [
       !b.includes("size") &&
       !b.includes("spacing")
     ) {
-      if (pa && !hasNumValue(pa)) return `color:${toVarRef(pa)};`
       if (sq && !hasNumValue(sq)) return `color:${colorValue(sq)};`
+      if (pa && !hasNumValue(pa)) return `color:${toVarRef(pa)};`
       if (!hasNumValue(b.slice(5))) return `color:${colorValue(b.slice(5))};`
     }
     return ""
@@ -1584,6 +1576,22 @@ const handlers = [
       return axis === "x"
         ? `-webkit-${prop}:translateX(${val});-ms-${prop}:translateX(${val});${prop}:translateX(${val});`
         : `-webkit-${prop}:translateY(${val});-ms-${prop}:translateY(${val});${prop}:translateY(${val});`
+    }
+
+    // Translate (both axes)
+    m = b.match(/^translate-(.+)$/)
+    if (m) {
+      const token = m[1]
+      const prop = "transform"
+      let val
+      if (token === "full") val = "100%,100%"
+      else if (token.startsWith("(")) val = toVarRef(getArbitrary(b, "("))
+      else if (token.startsWith("[")) val = getArbitrary(b, "[")
+      else {
+        const single = fracToPercent(token) ?? spacing[token] ?? token
+        val = `${single},${single}`
+      }
+      return `-webkit-${prop}:translate(${val});-ms-${prop}:translate(${val});${prop}:translate(${val});`
     }
 
     // Transform origin
