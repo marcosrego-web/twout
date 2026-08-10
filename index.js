@@ -344,6 +344,23 @@ const namedColors = {
   "rose-950": "#4c0519"
 }
 
+const animationValues = {
+  spin: "spin 1s linear infinite",
+  ping: "ping 1s cubic-bezier(0,0,0.2,1) infinite",
+  pulse: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite",
+  bounce: "bounce 1s infinite"
+}
+
+const animationKeyframes = {
+  spin: "@keyframes spin{to{transform:rotate(360deg);}}",
+  ping: "@keyframes ping{75%,100%{transform:scale(2);opacity:0;}}",
+  pulse: "@keyframes pulse{50%{opacity:.5;}}",
+  bounce:
+    "@keyframes bounce{0%,100%{transform:translateY(-25%);animation-timing-function:cubic-bezier(0.8,0,1,1);}50%{transform:none;animation-timing-function:cubic-bezier(0,0,0.2,1);}}"
+}
+
+let usedKeyframes = new Set()
+
 const weights = {
   thin: "100",
   extralight: "200",
@@ -1473,6 +1490,22 @@ const handlers = [
     return `transition-delay:${token}ms;`
   },
 
+  //animation
+  b => {
+    const m = b.match(/^animate-(.+)$/)
+    if (!m) return ""
+    const token = m[1]
+    if (token === "none") return "animation:none;"
+    if (animationValues[token]) {
+      usedKeyframes.add(token)
+      return `animation:var(--animate-${token},${animationValues[token]});`
+    }
+    if (token.startsWith("("))
+      return `animation:${toVarRef(getArbitrary(b, "("))};`
+    if (token.startsWith("[")) return `animation:${getArbitrary(b, "[")};`
+    return ""
+  },
+
   // TRANSFORMS
 
   b => {
@@ -1834,6 +1867,7 @@ const handlers = [
 // ---- main ----
 export default function Twout(classes) {
   let css = ""
+  usedKeyframes = new Set()
 
   // Normalize classes: dedupe and reorder by breakpoint groups.
   // Groups order: none, sm, md, lg, xl, 2xl
@@ -1892,5 +1926,10 @@ export default function Twout(classes) {
       css += wrapVariants(selector, rule, variants)
     }
   })
+
+  usedKeyframes.forEach(name => {
+    css += animationKeyframes[name]
+  })
+
   return css
 }
