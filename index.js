@@ -840,7 +840,8 @@ const handlers = [
       if (token.startsWith("("))
         return `${prop}:${toVarRef(getArbitrary(b, "("))};`
       if (token.startsWith("[")) return `${prop}:${getArbitrary(b, "[")};`
-      return `${prop}:repeat(${token},minmax(0,1fr));`
+      if (/^\d+$/.test(token)) return `${prop}:repeat(${token},minmax(0,1fr));`
+      return `${prop}:${token};`
     }
 
     return ""
