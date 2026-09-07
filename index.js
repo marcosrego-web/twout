@@ -1691,7 +1691,9 @@ const handlers = [
   b =>
     ({
       "scroll-auto": "scroll-behavior: auto;",
-      "scroll-smooth": "scroll-behavior: smooth;"
+      "scroll-smooth": "scroll-behavior: smooth;",
+      "pointer-events-auto": "pointer-events:auto;",
+      "pointer-events-none": "pointer-events:none;"
     }[b] || ""),
 
   b => {
