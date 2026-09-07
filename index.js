@@ -1692,9 +1692,118 @@ const handlers = [
     ({
       "scroll-auto": "scroll-behavior: auto;",
       "scroll-smooth": "scroll-behavior: smooth;",
+
       "pointer-events-auto": "pointer-events:auto;",
-      "pointer-events-none": "pointer-events:none;"
+      "pointer-events-none": "pointer-events:none;",
+
+      "appearance-none": "-webkit-appearance:none;appearance:none;",
+      "appearance-auto": "-webkit-appearance:auto;appearance:auto;",
+
+      "scheme-normal": "color-scheme:normal;",
+      "scheme-dark": "color-scheme:dark;",
+      "scheme-light": "color-scheme:light;",
+      "scheme-light-dark": "color-scheme:light dark;",
+      "scheme-only-dark": "color-scheme:only dark;",
+      "scheme-only-light": "color-scheme:only light;",
+
+      "field-sizing-fixed": "field-sizing:fixed;",
+      "field-sizing-content": "field-sizing:content;",
+
+      resize: "resize:both;",
+      "resize-none": "resize:none;",
+      "resize-x": "resize:horizontal;",
+      "resize-y": "resize:vertical;",
+
+      "select-none": "-webkit-user-select:none;user-select:none;",
+      "select-text": "-webkit-user-select:text;user-select:text;",
+      "select-all": "-webkit-user-select:all;user-select:all;",
+      "select-auto": "-webkit-user-select:auto;user-select:auto;",
+
+      "touch-auto": "touch-action:auto;",
+      "touch-none": "touch-action:none;",
+      "touch-pan-x": "touch-action:pan-x;",
+      "touch-pan-left": "touch-action:pan-left;",
+      "touch-pan-right": "touch-action:pan-right;",
+      "touch-pan-y": "touch-action:pan-y;",
+      "touch-pan-up": "touch-action:pan-up;",
+      "touch-pan-down": "touch-action:pan-down;",
+      "touch-pinch-zoom": "touch-action:pinch-zoom;",
+      "touch-manipulation": "touch-action:manipulation;",
+
+      "will-change-auto": "will-change:auto;",
+      "will-change-scroll": "will-change:scroll-position;",
+      "will-change-contents": "will-change:contents;",
+      "will-change-transform": "will-change:transform;",
+
+      // scroll-snap-align
+      "snap-start": "scroll-snap-align:start;",
+      "snap-end": "scroll-snap-align:end;",
+      "snap-center": "scroll-snap-align:center;",
+      "snap-align-none": "scroll-snap-align:none;",
+
+      // scroll-snap-stop
+      "snap-normal": "scroll-snap-stop:normal;",
+      "snap-always": "scroll-snap-stop:always;",
+
+      // scroll-snap-type (strictness is set by snap-mandatory/snap-proximity,
+      // with "proximity" as the fallback when neither is present)
+      "snap-none": "scroll-snap-type:none;",
+      "snap-x": "scroll-snap-type:x var(--tw-scroll-snap-strictness,proximity);",
+      "snap-y": "scroll-snap-type:y var(--tw-scroll-snap-strictness,proximity);",
+      "snap-both":
+        "scroll-snap-type:both var(--tw-scroll-snap-strictness,proximity);",
+      "snap-mandatory": "--tw-scroll-snap-strictness:mandatory;",
+      "snap-proximity": "--tw-scroll-snap-strictness:proximity;"
     }[b] || ""),
+
+  // scroll-margin & scroll-padding
+  b => {
+    const m = b.match(/^scroll-(m|p)([trblxyse]?)-(.+)$/)
+    if (!m) return ""
+    const [, type, axis, token] = m
+    const propBase = type === "p" ? "scroll-padding" : "scroll-margin"
+    let v
+    if (token.startsWith("(")) v = toVarRef(getArbitrary(b, "("))
+    else if (token.startsWith("[")) v = getArbitrary(b, "[")
+    else v = spacing[token] ?? token
+    const set = side => `${propBase}-${side}:${v};`
+    if (!axis) return `${propBase}:${v};`
+    if (axis === "x") return `${set("left")}${set("right")}`
+    if (axis === "y") return `${set("top")}${set("bottom")}`
+    const map = {
+      t: "top",
+      r: "right",
+      b: "bottom",
+      l: "left",
+      s: "inline-start",
+      e: "inline-end"
+    }
+    return set(map[axis])
+  },
+
+  // will-change (arbitrary values)
+  b => {
+    const m = b.match(/^will-change-(.+)$/)
+    if (!m) return ""
+    const token = m[1]
+    if (token.startsWith("("))
+      return `will-change:${toVarRef(getArbitrary(b, "("))};`
+    if (token.startsWith("[")) return `will-change:${getArbitrary(b, "[")};`
+    return ""
+  },
+
+  // accent-color & caret-color
+  b => {
+    const m = b.match(/^(accent|caret)-(.+)$/)
+    if (!m) return ""
+    const prop = m[1] === "accent" ? "accent-color" : "caret-color"
+    const token = m[2]
+    if (token.startsWith("("))
+      return `${prop}:${toVarRef(getArbitrary(b, "("))};`
+    if (token.startsWith("["))
+      return `${prop}:${colorValue(getArbitrary(b, "["))};`
+    return `${prop}:${colorValue(token)};`
+  },
 
   b => {
     const m = b.match(/^cursor-(.+)$/)
