@@ -448,6 +448,79 @@ const colorValue = token => {
   return token
 }
 
+const isColorToken = token =>
+  !!namedColors[token] ||
+  /^#([0-9a-f]{3,8})$/i.test(token) ||
+  /^(rgb|hsl|lab|lch|oklab|oklch|color|color-mix)a?\(/i.test(token) ||
+  token.startsWith("var(") ||
+  token.startsWith("--")
+
+const colorProperties = new Set([
+  "color",
+  "background-color",
+  "border-color",
+  "border-top-color",
+  "border-right-color",
+  "border-bottom-color",
+  "border-left-color",
+  "border-inline-start-color",
+  "border-inline-end-color",
+  "outline-color",
+  "text-decoration-color",
+  "accent-color",
+  "caret-color",
+  "column-rule-color",
+  "fill",
+  "stroke"
+])
+
+function splitOpacityModifier(base) {
+  let square = 0
+  let round = 0
+  let idx = -1
+  for (let i = 0; i < base.length; i++) {
+    const ch = base[i]
+    if (ch === "[") square++
+    else if (ch === "]") square--
+    else if (ch === "(") round++
+    else if (ch === ")") round--
+    else if (ch === "/" && square === 0 && round === 0) idx = i
+  }
+  if (idx <= 0 || idx === base.length - 1) return null
+  return { base: base.slice(0, idx), modifier: base.slice(idx + 1) }
+}
+
+const alphaToPercent = token => {
+  if (token.startsWith("(") && token.endsWith(")"))
+    return `calc(${toVarRef(token.slice(1, -1))} * 100%)`
+  if (token.startsWith("[") && token.endsWith("]")) {
+    const inner = decodeArbitraryValue(token.slice(1, -1))
+    if (!inner) return null
+    return inner.endsWith("%") ? inner : `calc(${inner} * 100%)`
+  }
+  if (/^\d+(\.\d+)?$/.test(token)) return `${Number(token)}%`
+  return null
+}
+
+function applyOpacityModifier(rule, percent) {
+  let touched = false
+  const out = rule
+    .split(";")
+    .map(decl => {
+      const i = decl.indexOf(":")
+      if (i === -1) return decl
+      const prop = decl.slice(0, i).trim()
+      if (!colorProperties.has(prop.toLowerCase())) return decl
+      touched = true
+      const value = decl.slice(i + 1).trim()
+      // A full-strength mix is just the colour itself.
+      if (percent === "100%") return `${prop}:${value}`
+      return `${prop}:color-mix(in oklab, ${value} ${percent}, transparent)`
+    })
+    .join(";")
+  return touched ? out : null
+}
+
 const pseudoMap = {
   before: "::before",
   after: "::after",
@@ -524,6 +597,59 @@ function bracketVariantFragment(v) {
   return null
 }
 
+// group-* / peer-* variants: styles driven by an ancestor (.group) or a
+// preceding sibling (.peer). Supports named groups ("group-hover/sidebar"),
+// pseudo-class states, has-[]/is-[]/not-[] and arbitrary "[&...]" selectors.
+function relativeVariantSelector(v) {
+  const m = v.match(/^(group|peer)-(.+)$/)
+  if (!m) return null
+  const [, kind, rest] = m
+
+  // A "/name" suffix outside brackets marks a named group/peer.
+  let state = rest
+  let name = ""
+  const slash = rest.lastIndexOf("/")
+  if (
+    slash > 0 &&
+    !rest.slice(slash).includes("]") &&
+    !rest.slice(slash).includes(")")
+  ) {
+    state = rest.slice(0, slash)
+    name = rest.slice(slash + 1)
+  }
+
+  // :where() keeps the parent class out of the specificity budget, so
+  // group-*/peer-* rules stay as specific as their plain counterparts.
+  const parent = `:where(.${kind}${name ? `\\/${name}` : ""})`
+  const combinator = kind === "group" ? " " : " ~ "
+  const wrap = state => `:is(${state}${combinator}*)`
+
+  const fragment = bracketVariantFragment(state)
+  if (fragment) return wrap(parent + fragment)
+
+  if (state.startsWith("[") && state.endsWith("]")) {
+    const inner = decodeArbitraryValue(state.slice(1, -1))
+    if (!inner) return null
+    return wrap(inner.includes("&") ? inner.replaceAll("&", parent) : parent + inner)
+  }
+
+  if (state.startsWith("not-")) {
+    const inner = state.slice(4)
+    const negated = bracketVariantFragment(inner) || pseudoMap[inner]
+    if (negated && negated.startsWith(":") && !negated.startsWith("::"))
+      return wrap(`${parent}:not(${negated})`)
+    return null
+  }
+
+  const pseudo = pseudoMap[state]
+  // Only real pseudo-classes qualify - "::before" and the "*"/"**" child
+  // shorthands describe the element itself, not an ancestor/sibling state.
+  if (pseudo && pseudo.startsWith(":") && !pseudo.startsWith("::"))
+    return wrap(parent + pseudo)
+
+  return null
+}
+
 const wrapVariants = (selector, rule, variants) => {
   const media = []
   let sel = selector
@@ -556,6 +682,8 @@ const wrapVariants = (selector, rule, variants) => {
     } else if (v.startsWith("[") && v.includes("&")) {
       const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
       sel = inner.replaceAll("&", sel)
+    } else if (relativeVariantSelector(v)) {
+      sel += relativeVariantSelector(v)
     } else {
       sel += `:${v}` // fallback (keeps original behavior)
     }
@@ -1306,6 +1434,12 @@ const handlers = [
             : "")
         )
 
+      if (isColorToken(val))
+        return (
+          `${prop}:${colorValue(val)};` +
+          (side == "x" || side == "y" ? `${prop2}:${colorValue(val)};` : "")
+        )
+
       return ""
     }
 
@@ -1318,6 +1452,7 @@ const handlers = [
         return `border-${prop}:${toVarRef(getArbitrary(b, "("))};`
       if (val.startsWith("[")) return `border-${prop}:${getArbitrary(b, "[")};`
       if (/^\d+$/.test(val)) return `border-width:${val}px;`
+      if (isColorToken(val)) return `border-color:${colorValue(val)};`
     }
 
     return ""
@@ -2027,11 +2162,26 @@ export default function Twout(classes) {
 
     const selector = escapeClass(raw) // keep '-' in class name
 
-    let rule = ""
-    for (const h of handlers) {
-      rule = h(base)
-      if (rule) break
+    const resolve = b => {
+      for (const h of handlers) {
+        const r = h(b)
+        if (r) return r
+      }
+      return ""
     }
+
+    let rule = ""
+
+    const mod = splitOpacityModifier(base)
+    if (mod) {
+      const percent = alphaToPercent(mod.modifier)
+      if (percent) {
+        const candidate = resolve(mod.base)
+        if (candidate) rule = applyOpacityModifier(candidate, percent) || ""
+      }
+    }
+
+    if (!rule) rule = resolve(base)
 
     if (rule) {
       rule = applyFlag(rule, isNegative, isImportant)
