@@ -1913,8 +1913,10 @@ const handlers = [
     } else if (b.startsWith("bg-")) {
       //Images
       if (b === "bg-none") return "background:none;background-image:none;"
-      if (sq && b.includes("url("))
-        return `background-image:${getArbitrary(b, "[")};`
+      const isImage =
+        /^(url|image-set|cross-fade|element|paint)\(/.test(sq || "") ||
+        /^(repeating-)?(linear|radial|conic)-gradient\(/.test(sq || "")
+      if (isImage) return `background-image:${sq};`
       if (pa && b.includes("image:"))
         return `background-image:${toVarRef(pa.replace("image:", ""))};`
       //Colors
@@ -1963,8 +1965,14 @@ const handlers = [
     // --tw-border-style so border-dashed still wins whatever the class order.
     // The style is scoped to the same edges as the width, otherwise the
     // untouched edges would pick up the default "medium" width.
+    // border-width takes up to four values and the inline/block shorthands
+    // two, but a single edge takes only one - and emitting the style without
+    // a usable width would leave a phantom "medium" border.
+    const multiValueBases = ["border", "border-inline", "border-block"]
     const sized = (base, value) =>
-      `${base}-style:var(--tw-border-style,solid);${base}-width:${value};`
+      isMultiPart(value) && !multiValueBases.includes(base)
+        ? ""
+        : `${base}-style:var(--tw-border-style,solid);${base}-width:${value};`
 
     if (b === "border") return sized("border", "1px")
 
