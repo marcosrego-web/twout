@@ -962,6 +962,10 @@ const splitTopLevel = (value, sep) => {
   return out
 }
 
+// True when a value has more than one top-level part, e.g. the "10px 20px" of
+// an arbitrary shorthand. Such a value is the whole shorthand, not one axis.
+const isMultiPart = value => /[\s,]/.test(stripGroups(value).trim())
+
 // Removes bracketed groups so only the top level of a value is left.
 const stripGroups = value => {
   let out = value
@@ -1371,10 +1375,8 @@ const handlers = [
     else v = spacingValue(token) ?? token
     const atomic = side => set(`${propBase}-${side}`, v)
     if (!axis) return set(propBase, v)
-    if (axis === "x")
-      return `${set(`${propBase}-left`, v)}${set(`${propBase}-right`, v)}`
-    if (axis === "y")
-      return `${set(`${propBase}-top`, v)}${set(`${propBase}-bottom`, v)}`
+    if (axis === "x") return set(`${propBase}-inline`, v)
+    if (axis === "y") return set(`${propBase}-block`, v)
     const map = {
       t: "top",
       r: "right",
@@ -1615,14 +1617,14 @@ const handlers = [
     let m = b.match(/^size-(.+)$/)
     if (m) {
       const v = lengthToken(b, m[1])
-      return v ? `width:${v};height:${v};` : ""
+      return v && !isMultiPart(v) ? `width:${v};height:${v};` : ""
     }
 
     m = b.match(/^inset-([xy])-(.+)$/)
     if (m) {
       const v = lengthToken(b, m[2])
       if (!v) return ""
-      return m[1] === "x" ? `left:${v};right:${v};` : `top:${v};bottom:${v};`
+      return m[1] === "x" ? `inset-inline:${v};` : `inset-block:${v};`
     }
 
     // inset-ring-* and inset-shadow-* belong to the box-shadow family
@@ -1674,7 +1676,7 @@ const handlers = [
       if (m[2] === "reverse")
         return { suffix, rule: `--tw-space-${axis}-reverse:1;` }
       const v = lengthToken(b, m[2])
-      if (!v) return ""
+      if (!v || isMultiPart(v)) return ""
       const rev = `var(--tw-space-${axis}-reverse,0)`
       const [from, to] =
         axis === "x"
@@ -1959,71 +1961,43 @@ const handlers = [
     // Twout emits no preflight, so a width utility has to carry a style or
     // the border never renders. Tailwind 4 routes it through
     // --tw-border-style so border-dashed still wins whatever the class order.
-    const styled = decls => `border-style:var(--tw-border-style,solid);${decls}`
+    // The style is scoped to the same edges as the width, otherwise the
+    // untouched edges would pick up the default "medium" width.
+    const sized = (base, value) =>
+      `${base}-style:var(--tw-border-style,solid);${base}-width:${value};`
 
-    if (b === "border") return styled("border-width:1px;")
+    if (b === "border") return sized("border", "1px")
 
-    // Border with sides
-    let m = b.match(/^border-(t|r|b|l|y|x)(?:-(.+))?$/)
+    // Border with sides. Tailwind 4 uses the logical shorthands for the x/y
+    // axes, which also accept a two-value arbitrary shorthand.
+    let m = b.match(/^border-(t|r|b|l|x|y|s|e)(?:-(.+))?$/)
     if (m) {
       const side = m[1]
-      const map = {
-        x: "left",
-        y: "top",
+      const axis = { x: "inline", y: "block" }[side]
+      const edge = {
         t: "top",
         r: "right",
         b: "bottom",
-        l: "left"
-      }
+        l: "left",
+        s: "inline-start",
+        e: "inline-end"
+      }[side]
+      const base = `border-${axis ?? edge}`
       const val = m[2]
 
-      if (!val)
-        return styled(
-          `border-${map[side]}-width:1px;` +
-            (side == "x" || side == "y"
-              ? `border-${map[side]
-                  .replace("top", "bottom")
-                  .replace("left", "right")}-width:1px;`
-              : "")
-        )
-
-      const prop = `border-${map[side]}-${
-        !hasNumValue(val) ? "color" : "width"
-      }`
-      const prop2 = `border-${map[side]
-        .replace("top", "bottom")
-        .replace("left", "right")}-${!hasNumValue(val) ? "color" : "width"}`
-
+      if (!val) return sized(base, "1px")
       if (val.startsWith("("))
-        return (
-          `${prop}:${toVarRef(getArbitrary(b, "("))};` +
-          (side == "x" || side == "y"
-            ? `${prop2}:${toVarRef(getArbitrary(b, "("))};`
-            : "")
-        )
-
-      if (val.startsWith("["))
-        return (
-          `${prop}:${getArbitrary(b, "[")};` +
-          (side == "x" || side == "y"
-            ? `${prop2}:${getArbitrary(b, "[")};`
-            : "")
-        )
-
-      if (/^\d+$/.test(val))
-        return styled(
-          `${prop.replace("color", "width")}:${val}px;` +
-            (side == "x" || side == "y"
-              ? `${prop2.replace("color", "width")}:${val}px;`
-              : "")
-        )
-
-      if (isColorToken(val))
-        return (
-          `${prop}:${colorValue(val)};` +
-          (side == "x" || side == "y" ? `${prop2}:${colorValue(val)};` : "")
-        )
-
+        return `${base}-color:${toVarRef(getArbitrary(b, "("))};`
+      // An arbitrary value has to be read decoded before deciding whether it
+      // is a width or a colour, and "1px 2px" is still a width.
+      if (val.startsWith("[")) {
+        const inner = getArbitrary(b, "[")
+        return inner.split(/\s+/).every(hasNumValue)
+          ? sized(base, inner)
+          : `${base}-color:${inner};`
+      }
+      if (/^\d+$/.test(val)) return sized(base, `${val}px`)
+      if (isColorToken(val)) return `${base}-color:${colorValue(val)};`
       return ""
     }
 
@@ -2031,11 +2005,15 @@ const handlers = [
     m = b.match(/^border-(.+)$/)
     if (m) {
       const val = m[1]
-      const prop = hasNumValue(val) ? "width" : "color"
       if (val.startsWith("("))
-        return `border-${prop}:${toVarRef(getArbitrary(b, "("))};`
-      if (val.startsWith("[")) return `border-${prop}:${getArbitrary(b, "[")};`
-      if (/^\d+$/.test(val)) return styled(`border-width:${val}px;`)
+        return `border-color:${toVarRef(getArbitrary(b, "("))};`
+      if (val.startsWith("[")) {
+        const inner = getArbitrary(b, "[")
+        return inner.split(/\s+/).every(hasNumValue)
+          ? sized("border", inner)
+          : `border-color:${inner};`
+      }
+      if (/^\d+$/.test(val)) return sized("border", `${val}px`)
       if (isColorToken(val)) return `border-color:${colorValue(val)};`
     }
 
@@ -2387,7 +2365,7 @@ const handlers = [
     m = b.match(/^skew-(.+)$/)
     if (m) {
       const v = angle(m[1], "deg")
-      if (!v) return ""
+      if (!v || isMultiPart(v)) return ""
       return (
         `--tw-skew-x:skewX(${v});--tw-skew-y:skewY(${v});` +
         `transform:${transformValue};`
@@ -2405,7 +2383,10 @@ const handlers = [
     m = b.match(/^scale-(.+)$/)
     if (m) {
       const v = angle(m[1], "%")
-      return v ? `--tw-scale-x:${v};--tw-scale-y:${v};scale:${scaleValue};` : ""
+      if (!v) return ""
+      // "scale-[1.5_2]" is the shorthand, not one axis repeated twice.
+      if (isMultiPart(v)) return `scale:${v};`
+      return `--tw-scale-x:${v};--tw-scale-y:${v};scale:${scaleValue};`
     }
 
     // Translate
@@ -2419,6 +2400,8 @@ const handlers = [
     if (m) {
       const v = length(m[1])
       if (!v) return ""
+      // "translate-[100%_-100%]" is the shorthand, not one axis repeated twice.
+      if (isMultiPart(v)) return `translate:${v};`
       return (
         `--tw-translate-x:${v};--tw-translate-y:${v};` +
         `translate:${translateValue};`
@@ -2524,8 +2507,8 @@ const handlers = [
     else v = spacingValue(token) ?? token
     const set = side => `${propBase}-${side}:${v};`
     if (!axis) return `${propBase}:${v};`
-    if (axis === "x") return `${set("left")}${set("right")}`
-    if (axis === "y") return `${set("top")}${set("bottom")}`
+    if (axis === "x") return `${propBase}-inline:${v};`
+    if (axis === "y") return `${propBase}-block:${v};`
     const map = {
       t: "top",
       r: "right",
