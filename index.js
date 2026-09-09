@@ -1,33 +1,27 @@
 // Twout - Tailwind classes output
 
-const spacing = {
-  "0": "0px",
-  px: "1px",
-  "0.5": "0.125rem",
-  "1": "0.25rem",
-  "1.5": "0.375rem",
-  "2": "0.5rem",
-  "2.5": "0.625rem",
-  "3": "0.75rem",
-  "4": "1rem",
-  "5": "1.25rem",
-  "6": "1.5rem",
-  "8": "2rem",
-  "10": "2.5rem",
-  "12": "3rem",
-  "16": "4rem"
-}
+// Tailwind 4 derives every spacing step from a single multiplier instead of a
+// fixed scale, so any number works. The inline fallback keeps the output
+// self-contained when the page defines no --spacing of its own.
+const spacingValue = token =>
+  token === "px"
+    ? "1px"
+    : isNumeric(token)
+    ? `calc(var(--spacing,0.25rem) * ${token})`
+    : null
 
 const radii = {
   none: "0",
-  sm: "0.125rem",
+  xs: "0.125rem",
+  sm: "0.25rem",
   "": "0.25rem",
   md: "0.375rem",
   lg: "0.5rem",
   xl: "0.75rem",
   "2xl": "1rem",
   "3xl": "1.5rem",
-  full: "9999px"
+  "4xl": "2rem",
+  full: "calc(infinity * 1px)"
 }
 
 const letterSpacing = {
@@ -46,14 +40,39 @@ const textSizes = {
   lg: { fs: "1.125rem", lh: "1.75rem" },
   xl: { fs: "1.25rem", lh: "1.75rem" },
   "2xl": { fs: "1.5rem", lh: "2rem" },
-  "3xl": { fs: "1.875rem", lh: "2.375rem" },
-  "4xl": { fs: "2.25rem", lh: "2.75rem" },
-  "5xl": { fs: "3rem", lh: "3.5rem" },
-  "6xl": { fs: "3.75rem", lh: "4.25rem" },
-  "7xl": { fs: "4.5rem", lh: "5rem" },
-  "8xl": { fs: "6rem", lh: "6.5rem" },
-  "9xl": { fs: "8rem", lh: "8.5rem" }
+  "3xl": { fs: "1.875rem", lh: "2.25rem" },
+  "4xl": { fs: "2.25rem", lh: "2.5rem" },
+  "5xl": { fs: "3rem", lh: "1" },
+  "6xl": { fs: "3.75rem", lh: "1" },
+  "7xl": { fs: "4.5rem", lh: "1" },
+  "8xl": { fs: "6rem", lh: "1" },
+  "9xl": { fs: "8rem", lh: "1" }
 }
+
+const lineHeights = {
+  none: "1",
+  tight: "1.25",
+  snug: "1.375",
+  normal: "1.5",
+  relaxed: "1.625",
+  loose: "2"
+}
+
+// text-* utilities that are not colours; the colour handler must skip them.
+const textNotColor = new Set([
+  "text-left",
+  "text-center",
+  "text-right",
+  "text-justify",
+  "text-start",
+  "text-end",
+  "text-ellipsis",
+  "text-clip",
+  "text-wrap",
+  "text-nowrap",
+  "text-balance",
+  "text-pretty"
+])
 
 const zIndexMap = {
   auto: "auto",
@@ -373,6 +392,221 @@ const weights = {
   black: "900"
 }
 
+const blurScale = {
+  none: "0",
+  xs: "4px",
+  sm: "8px",
+  "": "8px",
+  md: "12px",
+  lg: "16px",
+  xl: "24px",
+  "2xl": "40px",
+  "3xl": "64px"
+}
+
+const dropShadows = {
+  none: "drop-shadow(0 0 #0000)",
+  xs: "drop-shadow(0 1px 1px rgb(0 0 0/0.05))",
+  sm:
+    "drop-shadow(0 1px 2px rgb(0 0 0/0.1)) drop-shadow(0 1px 1px rgb(0 0 0/0.06))",
+  "":
+    "drop-shadow(0 1px 2px rgb(0 0 0/0.1)) drop-shadow(0 1px 1px rgb(0 0 0/0.06))",
+  md:
+    "drop-shadow(0 4px 3px rgb(0 0 0/0.07)) drop-shadow(0 2px 2px rgb(0 0 0/0.06))",
+  lg:
+    "drop-shadow(0 10px 8px rgb(0 0 0/0.04)) drop-shadow(0 4px 3px rgb(0 0 0/0.1))",
+  xl:
+    "drop-shadow(0 20px 13px rgb(0 0 0/0.03)) drop-shadow(0 8px 5px rgb(0 0 0/0.08))",
+  "2xl": "drop-shadow(0 25px 25px rgb(0 0 0/0.15))"
+}
+
+// Several Tailwind utilities share a single CSS property. Each one sets its own
+// custom property and then re-declares the whole composed value, so sibling
+// classes stack instead of the later rule overwriting the earlier one. Empty
+// var() fallbacks keep the unused slots out of the value without needing a
+// global defaults rule.
+const composeVars = names => names.map(n => `var(${n},)`).join(" ")
+
+// drop-shadow goes last so it applies after the colour filters; backdrop has no
+// drop-shadow but does have opacity.
+const filterFunctions = [
+  "blur",
+  "brightness",
+  "contrast",
+  "grayscale",
+  "hue-rotate",
+  "invert",
+  "saturate",
+  "sepia",
+  "drop-shadow"
+]
+
+const backdropFunctions = [
+  "blur",
+  "brightness",
+  "contrast",
+  "grayscale",
+  "hue-rotate",
+  "invert",
+  "opacity",
+  "saturate",
+  "sepia"
+]
+
+const filterValue = composeVars(filterFunctions.map(fn => `--tw-${fn}`))
+
+const backdropFilterValue = composeVars(
+  backdropFunctions.map(fn => `--tw-backdrop-${fn}`)
+)
+
+const touchActionValue = composeVars([
+  "--tw-pan-x",
+  "--tw-pan-y",
+  "--tw-pinch-zoom"
+])
+
+// Tailwind 4 keeps translate, scale and 2D rotate on their own CSS properties
+// and composes only the 3D rotations and the skews into `transform`. The
+// translate/scale fallbacks are identity values; the trailing z slot stays
+// empty so the shorthand falls back to its two-value form when unused.
+const transformValue = composeVars([
+  "--tw-rotate-x",
+  "--tw-rotate-y",
+  "--tw-rotate-z",
+  "--tw-skew-x",
+  "--tw-skew-y"
+])
+
+const translateValue =
+  "var(--tw-translate-x,0) var(--tw-translate-y,0) var(--tw-translate-z,)"
+
+const scaleValue = "var(--tw-scale-x,1) var(--tw-scale-y,1) var(--tw-scale-z,)"
+
+const transitionProperties =
+  "color, background-color, border-color, outline-color," +
+  " text-decoration-color, fill, stroke, --tw-gradient-from," +
+  " --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform," +
+  " translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter"
+
+const perspectives = {
+  dramatic: "100px",
+  near: "300px",
+  normal: "500px",
+  midrange: "800px",
+  distant: "1200px",
+  none: "none"
+}
+
+const fontVariantNumericValue = composeVars([
+  "--tw-ordinal",
+  "--tw-slashed-zero",
+  "--tw-numeric-figure",
+  "--tw-numeric-spacing",
+  "--tw-numeric-fraction"
+])
+
+const numericSlots = {
+  ordinal: ["ordinal", "ordinal"],
+  "slashed-zero": ["slashed-zero", "slashed-zero"],
+  "lining-nums": ["numeric-figure", "lining-nums"],
+  "oldstyle-nums": ["numeric-figure", "oldstyle-nums"],
+  "proportional-nums": ["numeric-spacing", "proportional-nums"],
+  "tabular-nums": ["numeric-spacing", "tabular-nums"],
+  "diagonal-fractions": ["numeric-fraction", "diagonal-fractions"],
+  "stacked-fractions": ["numeric-fraction", "stacked-fractions"]
+}
+
+// box-shadow layers are comma separated, so an unused slot needs a real
+// transparent shadow rather than the empty fallback the others use.
+const boxShadowValue = [
+  "--tw-inset-shadow",
+  "--tw-inset-ring-shadow",
+  "--tw-ring-offset-shadow",
+  "--tw-ring-shadow",
+  "--tw-shadow"
+]
+  .map(n => `var(${n},0 0 #0000)`)
+  .join(",")
+
+// Each layer of the scale carries a colour slot so that "shadow-lg
+// shadow-red-500" tints the shadow instead of replacing it.
+const shadowColor = alpha => `var(--tw-shadow-color,rgb(0 0 0/${alpha}))`
+
+const shadows = {
+  "2xs": `0 1px ${shadowColor("0.05")}`,
+  xs: `0 1px 2px 0 ${shadowColor("0.05")}`,
+  sm: `0 1px 3px 0 ${shadowColor("0.1")},0 1px 2px -1px ${shadowColor("0.1")}`,
+  "": `0 1px 3px 0 ${shadowColor("0.1")},0 1px 2px -1px ${shadowColor("0.1")}`,
+  md: `0 4px 6px -1px ${shadowColor("0.1")},0 2px 4px -2px ${shadowColor(
+    "0.1"
+  )}`,
+  lg: `0 10px 15px -3px ${shadowColor("0.1")},0 4px 6px -4px ${shadowColor(
+    "0.1"
+  )}`,
+  xl: `0 20px 25px -5px ${shadowColor("0.1")},0 8px 10px -6px ${shadowColor(
+    "0.1"
+  )}`,
+  "2xl": `0 25px 50px -12px ${shadowColor("0.25")}`,
+  none: "0 0 #0000"
+}
+
+const insetShadowColor = alpha =>
+  `var(--tw-inset-shadow-color,rgb(0 0 0/${alpha}))`
+
+const insetShadows = {
+  "2xs": `inset 0 1px ${insetShadowColor("0.05")}`,
+  xs: `inset 0 1px 1px ${insetShadowColor("0.05")}`,
+  sm: `inset 0 2px 4px ${insetShadowColor("0.05")}`,
+  "": `inset 0 2px 4px ${insetShadowColor("0.05")}`,
+  none: "0 0 #0000"
+}
+
+const ringShadow = width =>
+  "var(--tw-ring-inset,) 0 0 0 " +
+  `calc(${width} + var(--tw-ring-offset-width,0px)) ` +
+  "var(--tw-ring-color,currentColor)"
+
+const touchAction = (slot, value) =>
+  `--tw-${slot}:${value};touch-action:${touchActionValue};`
+
+const ringOffsetShadow =
+  "var(--tw-ring-inset,) 0 0 0 var(--tw-ring-offset-width,0px)" +
+  " var(--tw-ring-offset-color,#fff)"
+
+const insetRingShadow = width =>
+  `inset 0 0 0 ${width} var(--tw-inset-ring-color,currentColor)`
+
+// Gradient stops. "via-*" swaps in the three-colour list by setting
+// --tw-gradient-via-stops; every other stop utility leaves the two-colour
+// fallback in place. --tw-gradient-position is always written by the
+// bg-linear/radial/conic utility, so a stop on its own renders nothing.
+const gradientStopList = withVia =>
+  [
+    "var(--tw-gradient-position)",
+    "var(--tw-gradient-from,#0000) var(--tw-gradient-from-position,0%)",
+    withVia
+      ? "var(--tw-gradient-via,#0000) var(--tw-gradient-via-position,50%)"
+      : null,
+    "var(--tw-gradient-to,#0000) var(--tw-gradient-to-position,100%)"
+  ]
+    .filter(Boolean)
+    .join(",")
+
+const gradientStopsWithVia = gradientStopList(true)
+
+const gradientStops = `var(--tw-gradient-via-stops,${gradientStopList(false)})`
+
+const gradientDirections = {
+  t: "to top",
+  tr: "to top right",
+  r: "to right",
+  br: "to bottom right",
+  b: "to bottom",
+  bl: "to bottom left",
+  l: "to left",
+  tl: "to top left"
+}
+
 // ---- helpers ----
 const escapeClass = cls =>
   "." + cls.replace(/([!\"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1")
@@ -384,6 +618,9 @@ const fracToPercent = num => {
   if (!isFinite(n) || !isFinite(d) || d === 0) return null
   return ((n * 100) / d).toFixed(6).replace(/\.?0+$/, "") + "%"
 }
+
+// parseFloat("3d") is 3, which is not what a bare numeric token means here.
+const isNumeric = token => /^-?(\d+(\.\d+)?|\.\d+)$/.test(token)
 
 const opacityToDec = n => {
   const v = Number(n)
@@ -471,7 +708,15 @@ const colorProperties = new Set([
   "caret-color",
   "column-rule-color",
   "fill",
-  "stroke"
+  "stroke",
+  "--tw-shadow-color",
+  "--tw-inset-shadow-color",
+  "--tw-ring-color",
+  "--tw-inset-ring-color",
+  "--tw-ring-offset-color",
+  "--tw-gradient-from",
+  "--tw-gradient-via",
+  "--tw-gradient-to"
 ])
 
 function splitOpacityModifier(base) {
@@ -650,7 +895,7 @@ function relativeVariantSelector(v) {
   return null
 }
 
-const wrapVariants = (selector, rule, variants) => {
+const wrapVariants = (selector, rule, variants, suffix = "") => {
   const media = []
   let sel = selector
 
@@ -689,7 +934,7 @@ const wrapVariants = (selector, rule, variants) => {
     }
   })
 
-  let css = `${sel}{${rule}}`
+  let css = `${sel}${suffix}{${rule}}`
   media.reverse().forEach(v => {
     if (v === "dark") {
       css = `@media (prefers-color-scheme:dark){${css}}`
@@ -700,11 +945,47 @@ const wrapVariants = (selector, rule, variants) => {
   return css
 }
 
+// Splits on a separator that sits outside any bracket.
+const splitTopLevel = (value, sep) => {
+  const out = []
+  let depth = 0
+  let cur = ""
+  for (const ch of value) {
+    if (ch === "(" || ch === "[") depth++
+    else if (ch === ")" || ch === "]") depth--
+    if (ch === sep && depth === 0) {
+      out.push(cur)
+      cur = ""
+    } else cur += ch
+  }
+  out.push(cur)
+  return out
+}
+
+// Removes bracketed groups so only the top level of a value is left.
+const stripGroups = value => {
+  let out = value
+  let prev
+  do {
+    prev = out
+    out = out.replace(/\([^()]*\)/g, "")
+  } while (out !== prev)
+  return out
+}
+
 function negateValue(value) {
   value = value.trim()
 
   // If already negative, leave it
   if (value.startsWith("-")) return value
+
+  // Several space-separated parts (e.g. the composed backdrop-filter list)
+  // have nothing meaningful to negate.
+  if (/\s/.test(stripGroups(value))) return value
+
+  // calc() can hold commas inside var() fallbacks, so multiply the whole
+  // expression rather than trying to negate its arguments.
+  if (value.startsWith("calc(")) return `calc(${value} * -1)`
 
   // If var() → wrap in calc()
   if (value.startsWith("var(")) return `calc(${value} * -1)`
@@ -714,15 +995,63 @@ function negateValue(value) {
     return `-${value}`
   }
 
-  // Function call (e.g. rotate(45deg), translateX(1rem), scaleX(0.5)) → negate the inner value
+  // Function call (e.g. rotate(45deg), translateX(1rem)) → negate the args
   const fn = value.match(/^([a-zA-Z][\w-]*)\((.*)\)$/)
   if (fn) {
     const [, name, inner] = fn
-    const args = inner.split(",").map(a => negateValue(a.trim())).join(",")
+    const args = splitTopLevel(inner, ",")
+      .map(a => negateValue(a.trim()))
+      .join(",")
     return `${name}(${args})`
   }
 
   return value // fallback
+}
+
+// Resolves a length token the way the sizing, inset and spacing utilities do.
+function lengthToken(cls, token) {
+  if (token.startsWith("(")) return toVarRef(getArbitrary(cls, "("))
+  if (token.startsWith("[")) return getArbitrary(cls, "[")
+  if (token === "full") return "100%"
+  if (token === "auto") return "auto"
+  if (token === "min") return "min-content"
+  if (token === "max") return "max-content"
+  if (token === "fit") return "fit-content"
+  return fracToPercent(token) ?? spacingValue(token)
+}
+
+// Ring and shadow utilities accept either a width or a colour in the same
+// slot, so each token is offered to both readers in turn.
+function utilityWidth(cls, token) {
+  if (token.startsWith("(")) return null
+  const value = token.startsWith("[") ? getArbitrary(cls, "[") : token
+  if (/^\d+(\.\d+)?$/.test(value)) return `${value}px`
+  return /^\d+(\.\d+)?(px|em|rem)$/.test(value) ? value : null
+}
+
+function utilityColor(cls, token) {
+  if (token.startsWith("(")) return toVarRef(getArbitrary(cls, "("))
+  if (token.startsWith("[")) return colorValue(getArbitrary(cls, "["))
+  return isColorToken(token) ? colorValue(token) : null
+}
+
+// Builds the CSS function call behind one filter/backdrop-filter utility, e.g.
+// ("blur-sm", "blur", "sm") -> "blur(4px)". Returns null for tokens Tailwind
+// has no value for, so the caller emits nothing rather than invalid CSS.
+function filterFunctionValue(cls, fn, token) {
+  if (token.startsWith("(")) return `${fn}(${toVarRef(getArbitrary(cls, "("))})`
+  if (token.startsWith("[")) return `${fn}(${getArbitrary(cls, "[")})`
+
+  // blur and drop-shadow read from a named scale; the rest take a percentage
+  // (or degrees for hue-rotate).
+  if (fn == "blur")
+    return Object.hasOwn(blurScale, token) ? `blur(${blurScale[token]})` : null
+  if (fn == "drop-shadow")
+    return Object.hasOwn(dropShadows, token) ? dropShadows[token] : null
+
+  if (token == "") return `${fn}(${fn == "hue-rotate" ? "0deg" : "100%"})`
+  if (!isNumeric(token)) return null
+  return `${fn}(${token}${fn == "hue-rotate" ? "deg" : "%"})`
 }
 
 function applyFlag(rule, isNegative, isImportant) {
@@ -889,7 +1218,7 @@ const handlers = [
     if (token.startsWith("("))
       return `${side}:${toVarRef(getArbitrary(b, "("))};`
     if (token.startsWith("[")) return `${side}:${getArbitrary(b, "[")};`
-    return `${side}:${spacing[token] ?? token};`
+    return `${side}:${spacingValue(token) ?? token};`
   },
 
   //FLEXBOX & GRID
@@ -902,7 +1231,7 @@ const handlers = [
     let v
     if (token.startsWith("(")) v = toVarRef(getArbitrary(b, "("))
     else if (token.startsWith("[")) v = getArbitrary(b, "[")
-    else v = spacing[token] ?? token
+    else v = spacingValue(token) ?? token
     if (!axis) return `gap:${v};`
     return axis === "x" ? `column-gap:${v};` : `row-gap:${v};`
   },
@@ -1039,7 +1368,7 @@ const handlers = [
     let v
     if (token.startsWith("(")) v = toVarRef(getArbitrary(b, "("))
     else if (token.startsWith("[")) v = getArbitrary(b, "[")
-    else v = spacing[token] ?? token
+    else v = spacingValue(token) ?? token
     const atomic = side => set(`${propBase}-${side}`, v)
     if (!axis) return set(propBase, v)
     if (axis === "x")
@@ -1076,7 +1405,8 @@ const handlers = [
       if (token.startsWith("[")) return getArbitrary(b, "[")
       const frac = fracToPercent(token)
       if (frac) return frac
-      if (spacing[token]) return spacing[token]
+      const sp = spacingValue(token)
+      if (sp) return sp
       return token
     }
     const m = b.match(/^(min-w|min-h|max-w|max-h|inline|block|w|h)-(.*)$/)
@@ -1115,13 +1445,10 @@ const handlers = [
         return `font-size:${toVarRef(getArbitrary(b, "("))};`
       } else if (token.startsWith("[") && hasNumValue(getArbitrary(b, "["))) {
         return `font-size:${getArbitrary(b, "[")};`
-      } else if (hasNumValue(token)) {
-        const prop = "font-size"
+      } else if (Object.hasOwn(textSizes, token)) {
         const entry = textSizes[token]
-        if (entry) {
-          const lh = entry.lh ? `line-height:${entry.lh};` : ""
-          return prop + `:${entry.fs};${lh}`
-        }
+        return `font-size:${entry.fs};line-height:${entry.lh};`
+      } else if (hasNumValue(token)) {
         return ""
       }
     }
@@ -1133,9 +1460,10 @@ const handlers = [
       if (token.startsWith("("))
         return prop + `:${toVarRef(getArbitrary(b, "("))};`
       if (token.startsWith("[")) return prop + `:${getArbitrary(b, "[")};`
-      const token2 = b.match(/[^:-]+$/)
-      if (token2 && token2[0]) return prop + `:${token2[0]};`
-      return ""
+      if (Object.hasOwn(lineHeights, token))
+        return prop + `:${lineHeights[token]};`
+      const sp = spacingValue(token)
+      return sp ? prop + `:${sp};` : ""
     }
 
     m = b.match(/^font-(.+)$/)
@@ -1210,8 +1538,8 @@ const handlers = [
       return "text-transform:" + b + ";"
 
     // Text decoration line
-    if (b === "nounderline") return "text-decoration-line:none;"
-    if (b === "underline" || b === "overline" || b === "line-trough")
+    if (b === "no-underline") return "text-decoration-line:none;"
+    if (b === "underline" || b === "overline" || b === "line-through")
       return "text-decoration-line:" + b + ";"
 
     // Text underline offset
@@ -1282,6 +1610,201 @@ const handlers = [
       "wrap-normal": "overflow-wrap:normal;",
     }[b] || ""),
 
+  // size / inset / flex-basis / aspect / columns / space-between
+  b => {
+    let m = b.match(/^size-(.+)$/)
+    if (m) {
+      const v = lengthToken(b, m[1])
+      return v ? `width:${v};height:${v};` : ""
+    }
+
+    m = b.match(/^inset-([xy])-(.+)$/)
+    if (m) {
+      const v = lengthToken(b, m[2])
+      if (!v) return ""
+      return m[1] === "x" ? `left:${v};right:${v};` : `top:${v};bottom:${v};`
+    }
+
+    // inset-ring-* and inset-shadow-* belong to the box-shadow family
+    m = b.match(/^inset-(.+)$/)
+    if (m && !/^(ring|shadow)/.test(m[1])) {
+      const v = lengthToken(b, m[1])
+      if (v) return `inset:${v};`
+    }
+
+    m = b.match(/^(start|end)-(.+)$/)
+    if (m) {
+      const v = lengthToken(b, m[2])
+      if (v) return `inset-inline-${m[1]}:${v};`
+    }
+
+    m = b.match(/^basis-(.+)$/)
+    if (m) {
+      const v = lengthToken(b, m[1])
+      return v ? `flex-basis:${v};` : ""
+    }
+
+    m = b.match(/^aspect-(.+)$/)
+    if (m) {
+      const t = m[1]
+      if (t === "square") return "aspect-ratio:1/1;"
+      if (t === "video") return "aspect-ratio:16/9;"
+      if (t === "auto") return "aspect-ratio:auto;"
+      if (t.startsWith("("))
+        return `aspect-ratio:${toVarRef(getArbitrary(b, "("))};`
+      if (t.startsWith("[")) return `aspect-ratio:${getArbitrary(b, "[")};`
+      return /^\d+\/\d+$/.test(t) ? `aspect-ratio:${t};` : ""
+    }
+
+    m = b.match(/^columns-(.+)$/)
+    if (m) {
+      const t = m[1]
+      if (t === "auto") return "columns:auto;"
+      if (t.startsWith("(")) return `columns:${toVarRef(getArbitrary(b, "("))};`
+      if (t.startsWith("[")) return `columns:${getArbitrary(b, "[")};`
+      return isNumeric(t) ? `columns:${t};` : ""
+    }
+
+    // space-x-* / space-y-* style the children, so they carry a selector
+    // suffix instead of applying to the element itself.
+    m = b.match(/^space-([xy])-(.+)$/)
+    if (m) {
+      const axis = m[1]
+      const suffix = " > :not(:last-child)"
+      if (m[2] === "reverse")
+        return { suffix, rule: `--tw-space-${axis}-reverse:1;` }
+      const v = lengthToken(b, m[2])
+      if (!v) return ""
+      const rev = `var(--tw-space-${axis}-reverse,0)`
+      const [from, to] =
+        axis === "x"
+          ? ["margin-inline-start", "margin-inline-end"]
+          : ["margin-block-start", "margin-block-end"]
+      return {
+        suffix,
+        rule:
+          `${from}:calc(${v} * ${rev});` +
+          `${to}:calc(${v} * calc(1 - ${rev}));`
+      }
+    }
+
+    return ""
+  },
+
+  // outline
+  b => {
+    if (b === "outline-none") return "outline-style:none;"
+    if (b === "outline-hidden")
+      return "outline:2px solid transparent;outline-offset:2px;"
+    if (b === "outline")
+      return "outline-style:var(--tw-outline-style,solid);outline-width:1px;"
+
+    let m = b.match(/^outline-offset-(.+)$/)
+    if (m) {
+      const t = m[1]
+      if (t.startsWith("("))
+        return `outline-offset:${toVarRef(getArbitrary(b, "("))};`
+      if (t.startsWith("[")) return `outline-offset:${getArbitrary(b, "[")};`
+      return isNumeric(t) ? `outline-offset:${t}px;` : ""
+    }
+
+    m = b.match(/^outline-(.+)$/)
+    if (!m) return ""
+    const t = m[1]
+    if (["solid", "dashed", "dotted", "double"].includes(t))
+      return `--tw-outline-style:${t};outline-style:${t};`
+    const width = utilityWidth(b, t)
+    if (width)
+      return (
+        "outline-style:var(--tw-outline-style,solid);" +
+        `outline-width:${width};`
+      )
+    const color = utilityColor(b, t)
+    return color ? `outline-color:${color};` : ""
+  },
+
+  b =>
+    ({
+      truncate: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;",
+      "text-ellipsis": "text-overflow:ellipsis;",
+      "text-clip": "text-overflow:clip;",
+      "text-wrap": "text-wrap:wrap;",
+      "text-nowrap": "text-wrap:nowrap;",
+      "text-balance": "text-wrap:balance;",
+      "text-pretty": "text-wrap:pretty;",
+
+      "whitespace-normal": "white-space:normal;",
+      "whitespace-nowrap": "white-space:nowrap;",
+      "whitespace-pre": "white-space:pre;",
+      "whitespace-pre-line": "white-space:pre-line;",
+      "whitespace-pre-wrap": "white-space:pre-wrap;",
+      "whitespace-break-spaces": "white-space:break-spaces;",
+
+      "break-normal": "overflow-wrap:normal;word-break:normal;",
+      "break-words": "overflow-wrap:break-word;",
+      "break-all": "word-break:break-all;",
+      "break-keep": "word-break:keep-all;",
+
+      "break-inside-auto": "break-inside:auto;",
+      "break-inside-avoid": "break-inside:avoid;",
+      "break-inside-avoid-page": "break-inside:avoid-page;",
+      "break-inside-avoid-column": "break-inside:avoid-column;",
+
+      "list-inside": "list-style-position:inside;",
+      "list-outside": "list-style-position:outside;",
+
+      "table-auto": "table-layout:auto;",
+      "table-fixed": "table-layout:fixed;",
+      "border-collapse": "border-collapse:collapse;",
+      "border-separate": "border-collapse:separate;",
+      "caption-top": "caption-side:top;",
+      "caption-bottom": "caption-side:bottom;",
+
+      "place-items-start": "place-items:start;",
+      "place-items-end": "place-items:end;",
+      "place-items-center": "place-items:center;",
+      "place-items-baseline": "place-items:baseline;",
+      "place-items-stretch": "place-items:stretch;",
+      "place-content-center": "place-content:center;",
+      "place-content-start": "place-content:start;",
+      "place-content-end": "place-content:end;",
+      "place-content-between": "place-content:space-between;",
+      "place-content-around": "place-content:space-around;",
+      "place-content-evenly": "place-content:space-evenly;",
+      "place-content-stretch": "place-content:stretch;",
+      "place-self-auto": "place-self:auto;",
+      "place-self-start": "place-self:start;",
+      "place-self-end": "place-self:end;",
+      "place-self-center": "place-self:center;",
+      "place-self-stretch": "place-self:stretch;",
+
+      "auto-cols-auto": "grid-auto-columns:auto;",
+      "auto-cols-min": "grid-auto-columns:min-content;",
+      "auto-cols-max": "grid-auto-columns:max-content;",
+      "auto-cols-fr": "grid-auto-columns:minmax(0,1fr);",
+      "auto-rows-auto": "grid-auto-rows:auto;",
+      "auto-rows-min": "grid-auto-rows:min-content;",
+      "auto-rows-max": "grid-auto-rows:max-content;",
+      "auto-rows-fr": "grid-auto-rows:minmax(0,1fr);",
+
+      "flex-initial": "flex:0 1 auto;",
+      "fill-none": "fill:none;",
+      "fill-current": "fill:currentColor;",
+      "stroke-none": "stroke:none;",
+      "stroke-current": "stroke:currentColor;"
+    }[b] || ""),
+
+  // font-variant-numeric (each utility owns one slot of the composed value)
+  b => {
+    if (b === "normal-nums") return "font-variant-numeric:normal;"
+    if (!Object.hasOwn(numericSlots, b)) return ""
+    const [slot, value] = numericSlots[b]
+    return (
+      `--tw-${slot}:${value};` +
+      `font-variant-numeric:${fontVariantNumericValue};`
+    )
+  },
+
   // COLORS
 
   b =>
@@ -1307,6 +1830,52 @@ const handlers = [
       "bg-clip-content": "background-clip: content-box;",
       "bg-clip-text": "-webkit-background-clip: text; background-clip: text;"
     }[b] || ""),
+
+  // GRADIENTS - direction/angle utilities set the position slot, the colour
+  // stops fill their own slots, and every rule re-declares the stop list.
+  b => {
+    const linear = position =>
+      `--tw-gradient-position:${position};` +
+      `background-image:linear-gradient(${gradientStops});`
+
+    let m = b.match(/^bg-(?:linear|gradient)-to-([a-z]{1,2})$/)
+    if (m)
+      return Object.hasOwn(gradientDirections, m[1])
+        ? linear(gradientDirections[m[1]])
+        : ""
+
+    m = b.match(/^bg-(?:linear|gradient)-(\d+)$/)
+    if (m) return linear(`${m[1]}deg`)
+
+    if (b === "bg-radial")
+      return (
+        "--tw-gradient-position:ellipse;" +
+        `background-image:radial-gradient(${gradientStops});`
+      )
+
+    m = b.match(/^bg-conic(?:-(\d+))?$/)
+    if (m)
+      return (
+        `--tw-gradient-position:from ${m[1] ?? 0}deg;` +
+        `background-image:conic-gradient(${gradientStops});`
+      )
+
+    // Colour stops and their positions
+    m = b.match(/^(from|via|to)-(.+)$/)
+    if (m) {
+      const [, stop, token] = m
+      if (/^\d+(\.\d+)?%$/.test(token))
+        return `--tw-gradient-${stop}-position:${token};`
+      const color = utilityColor(b, token)
+      if (!color) return ""
+      return stop === "via"
+        ? `--tw-gradient-via:${color};` +
+            `--tw-gradient-via-stops:${gradientStopsWithVia};`
+        : `--tw-gradient-${stop}:${color};`
+    }
+
+    return ""
+  },
 
   b => {
     const sq = getArbitrary(b, "[")
@@ -1355,6 +1924,8 @@ const handlers = [
     //Text color
     if (
       b.startsWith("text-") &&
+      !b.startsWith("text-shadow") &&
+      !textNotColor.has(b) &&
       !b.includes("left") &&
       !b.includes("center") &&
       !b.includes("right") &&
@@ -1376,16 +1947,21 @@ const handlers = [
 
   b =>
     ({
-      "border-solid": "border-style: solid;",
-      "border-dashed": "border-style: dashed;",
-      "border-dotted": "border-style: dotted;",
-      "border-double": "border-style: double;",
-      "border-hidden": "border-style: hidden;",
-      "border-none": "border-style: none;"
+      "border-solid": "--tw-border-style:solid;border-style:solid;",
+      "border-dashed": "--tw-border-style:dashed;border-style:dashed;",
+      "border-dotted": "--tw-border-style:dotted;border-style:dotted;",
+      "border-double": "--tw-border-style:double;border-style:double;",
+      "border-hidden": "--tw-border-style:hidden;border-style:hidden;",
+      "border-none": "--tw-border-style:none;border-style:none;"
     }[b] || ""),
 
   b => {
-    if (b === "border") return "border-width:1px;"
+    // Twout emits no preflight, so a width utility has to carry a style or
+    // the border never renders. Tailwind 4 routes it through
+    // --tw-border-style so border-dashed still wins whatever the class order.
+    const styled = decls => `border-style:var(--tw-border-style,solid);${decls}`
+
+    if (b === "border") return styled("border-width:1px;")
 
     // Border with sides
     let m = b.match(/^border-(t|r|b|l|y|x)(?:-(.+))?$/)
@@ -1401,7 +1977,15 @@ const handlers = [
       }
       const val = m[2]
 
-      if (!val) return `border-${map[side]}-width:1px;`
+      if (!val)
+        return styled(
+          `border-${map[side]}-width:1px;` +
+            (side == "x" || side == "y"
+              ? `border-${map[side]
+                  .replace("top", "bottom")
+                  .replace("left", "right")}-width:1px;`
+              : "")
+        )
 
       const prop = `border-${map[side]}-${
         !hasNumValue(val) ? "color" : "width"
@@ -1427,11 +2011,11 @@ const handlers = [
         )
 
       if (/^\d+$/.test(val))
-        return (
+        return styled(
           `${prop.replace("color", "width")}:${val}px;` +
-          (side == "x" || side == "y"
-            ? `${prop2.replace("color", "width")}:${val}px;`
-            : "")
+            (side == "x" || side == "y"
+              ? `${prop2.replace("color", "width")}:${val}px;`
+              : "")
         )
 
       if (isColorToken(val))
@@ -1451,48 +2035,44 @@ const handlers = [
       if (val.startsWith("("))
         return `border-${prop}:${toVarRef(getArbitrary(b, "("))};`
       if (val.startsWith("[")) return `border-${prop}:${getArbitrary(b, "[")};`
-      if (/^\d+$/.test(val)) return `border-width:${val}px;`
+      if (/^\d+$/.test(val)) return styled(`border-width:${val}px;`)
       if (isColorToken(val)) return `border-color:${colorValue(val)};`
     }
 
     return ""
   },
 
+  // border-radius: every side, logical side and single corner
   b => {
-    //Border radius with sides
-    let rd = b.match(/^rounded-(t|r|b|l)(?:-(.+))?$/)
-    if (rd) {
-      const side = rd[1]
-      const map = {
-        t: "top-left",
-        r: "top-right",
-        b: "bottom-right",
-        l: "bottom-left"
-      }
-      const val = rd[2]
-
-      if (val.startsWith("("))
-        return `border-${map[side]}-radius:${toVarRef(getArbitrary(b, "("))};`
-
-      if (val.startsWith("["))
-        return `border-${map[side]}-radius:${getArbitrary(b, "[")};`
-
-      if (/^\d+$/.test(val)) return `border-${map[side]}-radius:${val}px;`
-
-      return ""
+    const corners = {
+      "": ["border-radius"],
+      t: ["border-top-left-radius", "border-top-right-radius"],
+      r: ["border-top-right-radius", "border-bottom-right-radius"],
+      b: ["border-bottom-right-radius", "border-bottom-left-radius"],
+      l: ["border-top-left-radius", "border-bottom-left-radius"],
+      s: ["border-start-start-radius", "border-end-start-radius"],
+      e: ["border-start-end-radius", "border-end-end-radius"],
+      tl: ["border-top-left-radius"],
+      tr: ["border-top-right-radius"],
+      br: ["border-bottom-right-radius"],
+      bl: ["border-bottom-left-radius"],
+      ss: ["border-start-start-radius"],
+      se: ["border-start-end-radius"],
+      ee: ["border-end-end-radius"],
+      es: ["border-end-start-radius"]
     }
-
-    //Border radius all sides
-    rd = b.match(/^rounded-(.+)$/)
-    if (rd) {
-      const val = rd[1]
-      if (val.startsWith("("))
-        return `border-radius:${toVarRef(getArbitrary(b, "("))};`
-      if (val.startsWith("[")) return `border-radius:${getArbitrary(b, "[")};`
-      if (/^\d+$/.test(val)) return `border-radius:${val}px;`
-    }
-
-    return ""
+    const m = b.match(
+      /^rounded(?:-(tl|tr|br|bl|ss|se|ee|es|t|r|b|l|s|e))?(?:-(.+))?$/
+    )
+    if (!m) return ""
+    const token = m[2] ?? ""
+    let value
+    if (token.startsWith("(")) value = toVarRef(getArbitrary(b, "("))
+    else if (token.startsWith("[")) value = getArbitrary(b, "[")
+    else if (Object.hasOwn(radii, token)) value = radii[token]
+    else if (/^\d+$/.test(token)) value = `${token}px`
+    else return ""
+    return corners[m[1] ?? ""].map(p => `${p}:${value};`).join("")
   },
 
   //EFFECTS
@@ -1509,18 +2089,74 @@ const handlers = [
     return dec ? `opacity:${dec};` : ""
   },
 
-  // box-shadow
+  // box-shadow. shadow, inset-shadow, ring, inset-ring and ring-offset each
+  // write one layer of the composed value, so they stack like Tailwind's.
   b => {
-    const sh = b.match(/^shadow(?:-(.+))?$/)
-    if (!sh) return ""
-    const token = sh[1] ?? ""
-    if (token == "none") return `box-shadow:0 0 #0000;`
-    if (token.startsWith("("))
-      return `box-shadow:${toVarRef(getArbitrary(b, "("))};`
-    if (token.startsWith("[")) return `box-shadow:${getArbitrary(b, "[")};`
-    return token === ""
-      ? `box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.1),0 1px 2px -1px rgb(0 0 0 / 0.1);`
-      : ""
+    const layer = (name, value) =>
+      `--tw-${name}:${value};box-shadow:${boxShadowValue};`
+
+    // ring-offset-<width> | ring-offset-<color>
+    let m = b.match(/^ring-offset-(.+)$/)
+    if (m) {
+      const width = utilityWidth(b, m[1])
+      if (width)
+        return (
+          `--tw-ring-offset-width:${width};` +
+          `--tw-ring-offset-shadow:${ringOffsetShadow};` +
+          `box-shadow:${boxShadowValue};`
+        )
+      const color = utilityColor(b, m[1])
+      return color ? `--tw-ring-offset-color:${color};` : ""
+    }
+
+    // ring-inset | ring | ring-<width> | ring-<color>
+    if (b === "ring-inset") return "--tw-ring-inset:inset;"
+    m = b.match(/^ring(?:-(.+))?$/)
+    if (m) {
+      const token = m[1] ?? "1"
+      const width = utilityWidth(b, token)
+      if (width) return layer("ring-shadow", ringShadow(width))
+      const color = utilityColor(b, token)
+      return color ? `--tw-ring-color:${color};` : ""
+    }
+
+    // inset-ring | inset-ring-<width> | inset-ring-<color>
+    m = b.match(/^inset-ring(?:-(.+))?$/)
+    if (m) {
+      const token = m[1] ?? "1"
+      const width = utilityWidth(b, token)
+      if (width) return layer("inset-ring-shadow", insetRingShadow(width))
+      const color = utilityColor(b, token)
+      return color ? `--tw-inset-ring-color:${color};` : ""
+    }
+
+    // inset-shadow | inset-shadow-<scale> | inset-shadow-<color>
+    m = b.match(/^inset-shadow(?:-(.+))?$/)
+    if (m) {
+      const token = m[1] ?? ""
+      if (token.startsWith("("))
+        return layer("inset-shadow", toVarRef(getArbitrary(b, "(")))
+      if (token.startsWith("["))
+        return layer("inset-shadow", `inset ${getArbitrary(b, "[")}`)
+      if (Object.hasOwn(insetShadows, token))
+        return layer("inset-shadow", insetShadows[token])
+      const color = utilityColor(b, token)
+      return color ? `--tw-inset-shadow-color:${color};` : ""
+    }
+
+    // shadow | shadow-<scale> | shadow-<color>
+    m = b.match(/^shadow(?:-(.+))?$/)
+    if (m) {
+      const token = m[1] ?? ""
+      if (token.startsWith("("))
+        return layer("shadow", toVarRef(getArbitrary(b, "(")))
+      if (token.startsWith("[")) return layer("shadow", getArbitrary(b, "["))
+      if (Object.hasOwn(shadows, token)) return layer("shadow", shadows[token])
+      const color = utilityColor(b, token)
+      return color ? `--tw-shadow-color:${color};` : ""
+    }
+
+    return ""
   },
 
   //text-shadow
@@ -1573,18 +2209,32 @@ const handlers = [
     const sh = b.match(/^transition(?:-(.+))?$/)
     if (!sh) return ""
     const token = sh[1] ?? ""
-    if (token === "normal") return `transition-behavior: normal;`
-    if (token === "discrete") return `transition-behavior: discrete;`
+    if (token === "normal") return `transition-behavior:normal;`
+    if (token === "discrete") return `transition-behavior:discrete;`
+
+    // Tailwind pairs every transition-property utility with a default
+    // duration and easing, both overridable by duration-*/ease-*.
+    const defaults =
+      "transition-timing-function:var(--tw-ease,cubic-bezier(0.4,0,0.2,1));" +
+      "transition-duration:var(--tw-duration,150ms);"
+    const set = value => `transition-property:${value};${defaults}`
+
+    if (token === "") return set(transitionProperties)
+    if (token === "none") return `transition-property:none;`
+    if (token === "all") return set("all")
     if (token === "colors")
-      return `transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke;`
-    if (token === "shadow") return `transition-property: box-shadow;`
+      return set(
+        "color, background-color, border-color, outline-color," +
+          " text-decoration-color, fill, stroke"
+      )
+    if (token === "opacity") return set("opacity")
+    if (token === "shadow") return set("box-shadow")
     if (token === "transform")
-      return `transition-property: transform, translate, scale, rotate;`
+      return set("transform, translate, scale, rotate")
     if (token.startsWith("("))
-      return `transition-property:${toVarRef(getArbitrary(b, "("))};`
-    if (token.startsWith("["))
-      return `transition-property:${getArbitrary(b, "[")};`
-    return `transition-property:${token};`
+      return set(toVarRef(getArbitrary(b, "(")))
+    if (token.startsWith("[")) return set(getArbitrary(b, "["))
+    return ""
   },
 
   //duration
@@ -1595,9 +2245,13 @@ const handlers = [
     if (token === "initial") return `transition-duration: initial;`
     if (token.startsWith("("))
       return `transition-duration:${toVarRef(getArbitrary(b, "("))};`
-    if (token.startsWith("["))
-      return `transition-duration:${getArbitrary(b, "[")};`
-    return `transition-duration:${token}ms;`
+    if (token.startsWith("[")) {
+      const v = getArbitrary(b, "[")
+      return `--tw-duration:${v};transition-duration:${v};`
+    }
+    return isNumeric(token)
+      ? `--tw-duration:${token}ms;transition-duration:${token}ms;`
+      : ""
   },
 
   //transition-timing-function
@@ -1610,8 +2264,10 @@ const handlers = [
     if (token.startsWith("["))
       return `transition-timing-function:${getArbitrary(b, "[")};`
     if (token === "initial" || token === "linear")
-      return `transition-timing-function:${token};`
-    return `transition-timing-function:${b};`
+      return `--tw-ease:${token};transition-timing-function:${token};`
+    return ["in", "out", "in-out"].includes(token)
+      ? `--tw-ease:${b};transition-timing-function:${b};`
+      : ""
   },
 
   //transition-delay
@@ -1649,175 +2305,138 @@ const handlers = [
     if (b === "backface-visible") return "backface-visibility:visible;"
     if (b === "backface-hidden") return "backface-visibility:hidden;"
 
+    // Transform style
+    if (b === "transform-style-flat") return "transform-style:flat;"
+    if (b === "transform-style-preserve-3d")
+      return "transform-style:preserve-3d;"
+
+    const origins = {
+      center: "center",
+      top: "top",
+      "top-left": "top left",
+      "top-right": "top right",
+      bottom: "bottom",
+      "bottom-left": "bottom left",
+      "bottom-right": "bottom right",
+      left: "left",
+      right: "right"
+    }
+
+    // Perspective origin, matched before perspective so that
+    // "perspective-origin-top" isn't read as a perspective length.
+    let m = b.match(/^perspective-origin-(.+)$/)
+    if (m) return `perspective-origin:${origins[m[1]] || m[1]};`
+
+    // Transform origin
+    m = b.match(/^origin-(.+)$/)
+    if (m) return `transform-origin:${origins[m[1]] || m[1]};`
+
     // Perspective
-    let m = b.match(/^perspective-(.+)$/)
+    m = b.match(/^perspective-(.+)$/)
     if (m) {
-      const prop = "perspective"
       const token = m[1]
       if (token.startsWith("("))
-        return prop + `:${toVarRef(getArbitrary(b, "("))};`
-      if (token.startsWith("[")) return prop + `:${getArbitrary(b, "[")};`
-      return prop + `:${token};`
+        return `perspective:${toVarRef(getArbitrary(b, "("))};`
+      if (token.startsWith("[")) return `perspective:${getArbitrary(b, "[")};`
+      return Object.hasOwn(perspectives, token)
+        ? `perspective:${perspectives[token]};`
+        : ""
     }
 
-    // Perspective origin
-    m = b.match(/^perspective-origin-(.+)$/)
-    if (m) {
-      const map = {
-        center: "center",
-        top: "top",
-        "top-left": "top left",
-        "top-right": "top right",
-        bottom: "bottom",
-        "bottom-left": "bottom left",
-        "bottom-right": "bottom right",
-        left: "left",
-        right: "right"
-      }
-      return `perspective-origin:${map[m[1]] || m[1]};`
+    // Angle or factor token: bare numbers take a unit, anything else has to be
+    // an arbitrary value or a custom property.
+    const angle = (token, unit) => {
+      if (token.startsWith("(")) return toVarRef(getArbitrary(b, "("))
+      if (token.startsWith("[")) return getArbitrary(b, "[")
+      return isNumeric(token) ? token + unit : null
     }
 
-    // Rotate (axis-specific: rotate-x-, rotate-y-, rotate-z-)
-    m = b.match(/^rotate-([xyz])-(-?.+)$/)
-    if (m) {
-      const prop = "transform"
-      const fn = "rotate" + m[1].toUpperCase()
-      const token = m[2]
-      let val
-      if (token.startsWith("(")) val = toVarRef(getArbitrary(b, "("))
-      else if (token.startsWith("[")) val = getArbitrary(b, "[")
-      else val = token + "deg"
-      return `-webkit-${prop}:${fn}(${val});-ms-${prop}:${fn}(${val});${prop}:${fn}(${val});`
+    // Length token: spacing scale, fraction, "full", or an arbitrary value.
+    const length = token => {
+      if (token.startsWith("(")) return toVarRef(getArbitrary(b, "("))
+      if (token.startsWith("[")) return getArbitrary(b, "[")
+      if (token === "full") return "100%"
+      const sp = spacingValue(token)
+      if (sp) return sp
+      return fracToPercent(token) ?? (hasNumValue(token) ? token : null)
     }
 
     // Rotate
-    m = b.match(/^rotate-(-?.+)$/)
+    m = b.match(/^rotate-([xyz])-(.+)$/)
     if (m) {
-      const prop = "transform"
-      const token = m[1]
-      let val
-      if (token.startsWith("(")) val = toVarRef(getArbitrary(b, "("))
-      else if (token.startsWith("[")) val = getArbitrary(b, "[")
-      else val = token + "deg"
-      return `-webkit-${prop}:rotate(${val});-ms-${prop}:rotate(${val});${prop}:rotate(${val});`
+      const v = angle(m[2], "deg")
+      if (!v) return ""
+      const fn = "rotate" + m[1].toUpperCase()
+      return `--tw-rotate-${m[1]}:${fn}(${v});transform:${transformValue};`
     }
-
-    // Scale
-    m = b.match(/^scale([xy]?)-(.+)$/)
+    if (b === "rotate-none") return "rotate:none;"
+    m = b.match(/^rotate-(.+)$/)
     if (m) {
-      const prop = "transform"
-      const axis = m[1]
-      const token = m[2]
-      let val
-      if (token.startsWith("(")) val = toVarRef(getArbitrary(b, "("))
-      else if (token.startsWith("[")) val = getArbitrary(b, "[")
-      else val = parseInt(token, 10) / 100 + "" // Tailwind uses percentages (50 → 0.5)
-      if (axis === "x") return prop + `:scaleX(${val});`
-      if (axis === "y") return prop + `:scaleY(${val});`
-      return prop + `:scale(${val});`
+      const v = angle(m[1], "deg")
+      return v ? `rotate:${v};` : ""
     }
 
     // Skew
     m = b.match(/^skew-([xy])-(.+)$/)
     if (m) {
-      const prop = "transform"
-      const axis = m[1]
-      const token = m[2]
-      let val
-      if (token.startsWith("(")) val = toVarRef(getArbitrary(b, "("))
-      else if (token.startsWith("[")) val = getArbitrary(b, "[")
-      else val = token + "deg"
-      return axis === "x"
-        ? `-webkit-${prop}:skewX(${val});-ms-${prop}:skewX(${val});${prop}:skewX(${val});`
-        : `-webkit-${prop}:skewY(${val});-ms-${prop}:skewY(${val});${prop}:skewY(${val});`
+      const v = angle(m[2], "deg")
+      if (!v) return ""
+      const fn = "skew" + m[1].toUpperCase()
+      return `--tw-skew-${m[1]}:${fn}(${v});transform:${transformValue};`
+    }
+    m = b.match(/^skew-(.+)$/)
+    if (m) {
+      const v = angle(m[1], "deg")
+      if (!v) return ""
+      return (
+        `--tw-skew-x:skewX(${v});--tw-skew-y:skewY(${v});` +
+        `transform:${transformValue};`
+      )
+    }
+
+    // Scale
+    if (b === "scale-none") return "scale:none;"
+    if (b === "scale-3d") return `scale:${scaleValue};`
+    m = b.match(/^scale-([xyz])-(.+)$/)
+    if (m) {
+      const v = angle(m[2], "%")
+      return v ? `--tw-scale-${m[1]}:${v};scale:${scaleValue};` : ""
+    }
+    m = b.match(/^scale-(.+)$/)
+    if (m) {
+      const v = angle(m[1], "%")
+      return v ? `--tw-scale-x:${v};--tw-scale-y:${v};scale:${scaleValue};` : ""
     }
 
     // Translate
-    m = b.match(/^translate-([xy])-(.+)$/)
+    if (b === "translate-none") return "translate:none;"
+    m = b.match(/^translate-([xyz])-(.+)$/)
     if (m) {
-      const axis = m[1]
-      const token = m[2]
-      const prop = "transform"
-      let val
-      if (token.startsWith("(")) val = toVarRef(getArbitrary(b, "("))
-      else if (token.startsWith("[")) val = getArbitrary(b, "[")
-      else val = spacing[token] ?? token
-      return axis === "x"
-        ? `-webkit-${prop}:translateX(${val});-ms-${prop}:translateX(${val});${prop}:translateX(${val});`
-        : `-webkit-${prop}:translateY(${val});-ms-${prop}:translateY(${val});${prop}:translateY(${val});`
+      const v = length(m[2])
+      return v ? `--tw-translate-${m[1]}:${v};translate:${translateValue};` : ""
     }
-
-    // Translate (both axes)
     m = b.match(/^translate-(.+)$/)
     if (m) {
-      const token = m[1]
-      const prop = "transform"
-      let val
-      if (token === "full") val = "100%,100%"
-      else if (token.startsWith("(")) val = toVarRef(getArbitrary(b, "("))
-      else if (token.startsWith("[")) val = getArbitrary(b, "[")
-      else {
-        const single = fracToPercent(token) ?? spacing[token] ?? token
-        val = `${single},${single}`
-      }
-      return `-webkit-${prop}:translate(${val});-ms-${prop}:translate(${val});${prop}:translate(${val});`
-    }
-
-    // Transform origin
-    m = b.match(/^origin-(.+)$/)
-    if (m) {
-      const map = {
-        center: "center",
-        top: "top",
-        "top-left": "top left",
-        "top-right": "top right",
-        bottom: "bottom",
-        "bottom-left": "bottom left",
-        "bottom-right": "bottom right",
-        left: "left",
-        right: "right"
-      }
-      return `transform-origin:${map[m[1]] || m[1]};`
+      const v = length(m[1])
+      if (!v) return ""
+      return (
+        `--tw-translate-x:${v};--tw-translate-y:${v};` +
+        `translate:${translateValue};`
+      )
     }
 
     // Transform
+    if (b === "transform-none") return "transform:none;"
+    if (b === "transform-cpu") return `transform:${transformValue};`
+    if (b === "transform-gpu")
+      return `transform:translateZ(0) ${transformValue};`
     m = b.match(/^transform-(.+)$/)
-    if (b === "transform-none") {
-      const prop = "transform"
-      return (
-        "-webkit-" + prop + "none;" + "-ms-" + prop + "none;" + prop + "none;"
-      )
-    } else if (m) {
-      const prop = "transform"
+    if (m) {
       const token = m[1]
       if (token.startsWith("("))
-        return (
-          "-webkit-" +
-          prop +
-          `:${toVarRef(getArbitrary(b, "("))};` +
-          "-ms-" +
-          prop +
-          `:${toVarRef(getArbitrary(b, "("))};` +
-          prop +
-          `:${toVarRef(getArbitrary(b, "("))};`
-        )
-      if (token.startsWith("["))
-        return (
-          "-webkit-" +
-          prop +
-          `:${getArbitrary(b, "[")};` +
-          "-ms-" +
-          prop +
-          `:${getArbitrary(b, "[")};` +
-          prop +
-          `:${getArbitrary(b, "[")};`
-        )
-    } //gpu & cpu missing?
-
-    // Transform style
-    if (b === "transform-style-flat") return "transform-style:flat;"
-    if (b === "transform-style-preserve-3d")
-      return "transform-style:preserve-3d;"
+        return `transform:${toVarRef(getArbitrary(b, "("))};`
+      if (token.startsWith("[")) return `transform:${getArbitrary(b, "[")};`
+    }
 
     return ""
   },
@@ -1854,16 +2473,18 @@ const handlers = [
       "select-all": "-webkit-user-select:all;user-select:all;",
       "select-auto": "-webkit-user-select:auto;user-select:auto;",
 
+      // touch-action (the pan-*/pinch-zoom utilities compose; auto, none and
+      // manipulation are standalone values that replace the whole property)
       "touch-auto": "touch-action:auto;",
       "touch-none": "touch-action:none;",
-      "touch-pan-x": "touch-action:pan-x;",
-      "touch-pan-left": "touch-action:pan-left;",
-      "touch-pan-right": "touch-action:pan-right;",
-      "touch-pan-y": "touch-action:pan-y;",
-      "touch-pan-up": "touch-action:pan-up;",
-      "touch-pan-down": "touch-action:pan-down;",
-      "touch-pinch-zoom": "touch-action:pinch-zoom;",
       "touch-manipulation": "touch-action:manipulation;",
+      "touch-pan-x": touchAction("pan-x", "pan-x"),
+      "touch-pan-left": touchAction("pan-x", "pan-left"),
+      "touch-pan-right": touchAction("pan-x", "pan-right"),
+      "touch-pan-y": touchAction("pan-y", "pan-y"),
+      "touch-pan-up": touchAction("pan-y", "pan-up"),
+      "touch-pan-down": touchAction("pan-y", "pan-down"),
+      "touch-pinch-zoom": touchAction("pinch-zoom", "pinch-zoom"),
 
       "will-change-auto": "will-change:auto;",
       "will-change-scroll": "will-change:scroll-position;",
@@ -1900,7 +2521,7 @@ const handlers = [
     let v
     if (token.startsWith("(")) v = toVarRef(getArbitrary(b, "("))
     else if (token.startsWith("[")) v = getArbitrary(b, "[")
-    else v = spacing[token] ?? token
+    else v = spacingValue(token) ?? token
     const set = side => `${propBase}-${side}:${v};`
     if (!axis) return `${propBase}:${v};`
     if (axis === "x") return `${set("left")}${set("right")}`
@@ -1956,158 +2577,58 @@ const handlers = [
   //FILTERS
 
   b => {
-    const m = b.match(/^filter-(.+)$/)
-    if (m) {
-      const prop = "filter"
-      const token = m[1]
-      if (token == "none") return "-webkit-" + prop + "none;" + prop + "none;"
-      if (token.startsWith("("))
-        return (
-          "-webkit-" +
-          prop +
-          `:${toVarRef(getArbitrary(b, "("))};` +
-          prop +
-          `:${toVarRef(getArbitrary(b, "("))};`
-        )
-      if (token.startsWith("["))
-        return (
-          "-webkit-" +
-          prop +
-          `:${getArbitrary(b, "[")};` +
-          prop +
-          `:${getArbitrary(b, "[")};`
-        )
-    }
+    const m = b.match(/^filter(?:-(.+))?$/)
+    if (!m) return ""
+    const token = m[1] ?? ""
+    const emit = value => `-webkit-filter:${value};filter:${value};`
+    if (token == "") return emit(filterValue)
+    if (token == "none") return emit("none")
+    if (token.startsWith("(")) return emit(toVarRef(getArbitrary(b, "(")))
+    if (token.startsWith("[")) return emit(getArbitrary(b, "["))
     return ""
   },
 
   b => {
-    const m =
-      b.match(/^blur(?:-(.+))?$/) ||
-      b.match(/^brightness(?:-(.+))?$/) ||
-      b.match(/^contrast(?:-(.+))?$/) ||
-      b.match(/^drop-shadow(?:-(.+))?$/) ||
-      b.match(/^grayscale(?:-(.+))?$/) ||
-      b.match(/^hue-rotate(?:-(.+))?$/) ||
-      b.match(/^invert(?:-(.+))?$/) ||
-      b.match(/^saturate(?:-(.+))?$/) ||
-      b.match(/^sepia(?:-(.+))?$/)
-    if (m) {
-      const prop = "filter"
-      const token = m[1] ?? "100"
-      const declaration = b.startsWith("drop-shadow")
-        ? "drop-shadow"
-        : b.startsWith("hue-rotate")
-        ? "hue-rotate"
-        : m[0].replace(token, "").replace("-", "")
-      if (declaration) {
-        if (token.startsWith("("))
-          return (
-            "-webkit-" +
-            prop +
-            ":" +
-            declaration +
-            `(${toVarRef(getArbitrary(b, "("))});` +
-            prop +
-            ":" +
-            declaration +
-            `(${toVarRef(getArbitrary(b, "("))});`
-          )
-        if (token.startsWith("["))
-          return (
-            "-webkit-" +
-            prop +
-            ":" +
-            declaration +
-            `(${getArbitrary(b, "[")});` +
-            prop +
-            ":" +
-            declaration +
-            `(${getArbitrary(b, "[")});`
-          )
-        if (
-          token &&
-          declaration != token &&
-          declaration == "hue-rotate" &&
-          !isNaN(parseFloat(token))
-        )
-          return (
-            "-webkit-" +
-            prop +
-            ":" +
-            declaration +
-            `(${token}deg);` +
-            prop +
-            ":" +
-            declaration +
-            `(${token}deg);`
-          )
-        if (token && declaration != token && !isNaN(parseFloat(token)))
-          return (
-            "-webkit-" +
-            prop +
-            ":" +
-            declaration +
-            `(${token}%);` +
-            prop +
-            ":" +
-            declaration +
-            `(${token}%);`
-          )
-        if (token && declaration != token)
-          return (
-            "-webkit-" +
-            prop +
-            ":" +
-            declaration +
-            `(${token});` +
-            prop +
-            ":" +
-            declaration +
-            `(${token});`
-          )
-      }
-      return ""
-    }
+    const m = b.match(
+      /^(blur|brightness|contrast|drop-shadow|grayscale|hue-rotate|invert|saturate|sepia)(?:-(.+))?$/
+    )
+    if (!m) return ""
+    const value = filterFunctionValue(b, m[1], m[2] ?? "")
+    if (!value) return ""
+    return (
+      `--tw-${m[1]}:${value};` +
+      `-webkit-filter:${filterValue};` +
+      `filter:${filterValue};`
+    )
+  },
+
+  //BACKDROP FILTERS
+
+  b => {
+    const m = b.match(/^backdrop-filter(?:-(.+))?$/)
+    if (!m) return ""
+    const token = m[1] ?? ""
+    const emit = value =>
+      `-webkit-backdrop-filter:${value};backdrop-filter:${value};`
+    if (token == "") return emit(backdropFilterValue)
+    if (token == "none") return emit("none")
+    if (token.startsWith("(")) return emit(toVarRef(getArbitrary(b, "(")))
+    if (token.startsWith("[")) return emit(getArbitrary(b, "["))
     return ""
   },
 
-  //TRANSFORMS
-
   b => {
-    const m = b.match(/^transform-(.+)$/)
-    if (m) {
-      const prop = "transform"
-      const token = m[1]
-      if (token == "none")
-        return (
-          "-webkit-" + prop + "none;" + "-ms-" + prop + "none;" + prop + "none;"
-        )
-      if (token.startsWith("("))
-        return (
-          "-webkit-" +
-          prop +
-          `:${toVarRef(getArbitrary(b, "("))};` +
-          "-ms-" +
-          prop +
-          `:${toVarRef(getArbitrary(b, "("))};` +
-          prop +
-          `:${toVarRef(getArbitrary(b, "("))};`
-        )
-      if (token.startsWith("["))
-        return (
-          "-webkit-" +
-          prop +
-          `:${getArbitrary(b, "[")};` +
-          "-ms-" +
-          prop +
-          `:${getArbitrary(b, "[")};` +
-          prop +
-          `:${getArbitrary(b, "[")};`
-        )
-      //Missing transform-gpu and transform-cpu
-    }
-    return ""
+    const m = b.match(
+      /^backdrop-(blur|brightness|contrast|grayscale|hue-rotate|invert|opacity|saturate|sepia)(?:-(.+))?$/
+    )
+    if (!m) return ""
+    const value = filterFunctionValue(b, m[1], m[2] ?? "")
+    if (!value) return ""
+    return (
+      `--tw-backdrop-${m[1]}:${value};` +
+      `-webkit-backdrop-filter:${backdropFilterValue};` +
+      `backdrop-filter:${backdropFilterValue};`
+    )
   }
 ]
 
@@ -2162,30 +2683,44 @@ export default function Twout(classes) {
 
     const selector = escapeClass(raw) // keep '-' in class name
 
+    // A handler returns declarations, or { suffix, rule } when the utility
+    // styles the element's children (space-x-*) rather than the element.
     const resolve = b => {
       for (const h of handlers) {
         const r = h(b)
-        if (r) return r
+        if (r) return typeof r === "string" ? { suffix: "", rule: r } : r
       }
-      return ""
+      return null
     }
 
     let rule = ""
+    let suffix = ""
 
     const mod = splitOpacityModifier(base)
     if (mod) {
       const percent = alphaToPercent(mod.modifier)
       if (percent) {
         const candidate = resolve(mod.base)
-        if (candidate) rule = applyOpacityModifier(candidate, percent) || ""
+        const applied =
+          candidate && applyOpacityModifier(candidate.rule, percent)
+        if (applied) {
+          rule = applied
+          suffix = candidate.suffix
+        }
       }
     }
 
-    if (!rule) rule = resolve(base)
+    if (!rule) {
+      const resolved = resolve(base)
+      if (resolved) {
+        rule = resolved.rule
+        suffix = resolved.suffix
+      }
+    }
 
     if (rule) {
       rule = applyFlag(rule, isNegative, isImportant)
-      css += wrapVariants(selector, rule, variants)
+      css += wrapVariants(selector, rule, variants, suffix)
     }
   })
 
