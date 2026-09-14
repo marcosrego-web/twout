@@ -769,6 +769,7 @@ function applyOpacityModifier(rule, percent) {
 const pseudoMap = {
   before: "::before",
   after: "::after",
+  placeholder: "::placeholder",
   hover: ":hover",
   focus: ":focus",
   "focus-within": ":focus-within",
@@ -788,6 +789,7 @@ const pseudoMap = {
   disabled: ":disabled",
   enabled: ":enabled",
   checked: ":checked",
+  "placeholder-shown": ":placeholder-shown",
   "*": " > *",
   "**": " *"
 } //Some are missing //Check: https://tailwindcss.com/docs/hover-focus-and-other-states#pseudo-class-reference
