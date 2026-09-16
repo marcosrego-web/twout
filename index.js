@@ -24,6 +24,36 @@ const radii = {
   full: "calc(infinity * 1px)"
 }
 
+// Tailwind 4's container scale, shared by the width, min-width, max-width and
+// flex-basis utilities. It replaced the v3 max-w-screen-* breakpoint scale.
+const containerSizes = {
+  "3xs": "16rem",
+  "2xs": "18rem",
+  xs: "20rem",
+  sm: "24rem",
+  md: "28rem",
+  lg: "32rem",
+  xl: "36rem",
+  "2xl": "42rem",
+  "3xl": "48rem",
+  "4xl": "56rem",
+  "5xl": "64rem",
+  "6xl": "72rem",
+  "7xl": "80rem"
+}
+
+// Viewport-relative sizing keywords: w-dvw, h-svh, size-lvh and friends.
+const viewportSizes = {
+  vw: "100vw",
+  vh: "100vh",
+  dvw: "100dvw",
+  dvh: "100dvh",
+  lvw: "100lvw",
+  lvh: "100lvh",
+  svw: "100svw",
+  svh: "100svh"
+}
+
 const letterSpacing = {
   tighter: "var(--tracking-tighter,-0.05em)",
   tight: "var(--tracking-tight,-0.025em)",
@@ -1015,7 +1045,9 @@ function negateValue(value) {
 }
 
 // Resolves a length token the way the sizing, inset and spacing utilities do.
-function lengthToken(cls, token) {
+// The viewport and container scales are opt-in because only some utilities in
+// this family accept them: size-* reads viewport units, basis-* the containers.
+function lengthToken(cls, token, scales = {}) {
   if (token.startsWith("(")) return toVarRef(getArbitrary(cls, "("))
   if (token.startsWith("[")) return getArbitrary(cls, "[")
   if (token === "full") return "100%"
@@ -1023,6 +1055,10 @@ function lengthToken(cls, token) {
   if (token === "min") return "min-content"
   if (token === "max") return "max-content"
   if (token === "fit") return "fit-content"
+  if (scales.viewport && Object.hasOwn(viewportSizes, token))
+    return viewportSizes[token]
+  if (scales.container && Object.hasOwn(containerSizes, token))
+    return containerSizes[token]
   return fracToPercent(token) ?? spacingValue(token)
 }
 
@@ -1394,17 +1430,19 @@ const handlers = [
 
   b => {
     const apply = (prop, token) => `${prop}:${token};`
-    const sizeToken = token => {
+    // inline-size follows the width family, block-size the height family.
+    const inlineAxis = prop => /(^|-)w$/.test(prop) || prop === "inline"
+    const sizeToken = (token, prop) => {
       if (token === "auto") return "auto"
       if (token === "full") return "100%"
       if (token === "min" || token === "max" || token === "fit") return token+'-content'
-      if (token === "screen") return b.includes("w-") ? "100vw" : "100vh"
-      if (token === "vw") return "100vw"
-      if (token === "dvw") return "100dvw"
-      if (token === "dvh") return "100dvh"
-      if (token === "lvw") return "100lvw"
-      if (token === "lvh") return "100lvh"
-      if (token === "svw") return "100svw"
+      if (token === "screen") return inlineAxis(prop) ? "100vw" : "100vh"
+      if (Object.hasOwn(viewportSizes, token)) return viewportSizes[token]
+      // The container scale is width-only; 1lh and prose read on their own axis.
+      if (inlineAxis(prop) && Object.hasOwn(containerSizes, token))
+        return containerSizes[token]
+      if (prop === "max-w" && token === "prose") return "65ch"
+      if (!inlineAxis(prop) && token === "lh") return "1lh"
       if (token.startsWith("(")) return toVarRef(getArbitrary(b, "("))
       if (token.startsWith("[")) return getArbitrary(b, "[")
       const frac = fracToPercent(token)
@@ -1425,7 +1463,7 @@ const handlers = [
       .replace(/^max-h$/, "max-height")
       .replace(/^inline$/, "inline-size")
       .replace(/^block$/, "block-size")
-    return apply(cssProp, sizeToken(token))
+    return apply(cssProp, sizeToken(token, prop))
   },
 
   // TYPOGRAPHY
@@ -1618,7 +1656,7 @@ const handlers = [
   b => {
     let m = b.match(/^size-(.+)$/)
     if (m) {
-      const v = lengthToken(b, m[1])
+      const v = lengthToken(b, m[1], { viewport: true })
       return v && !isMultiPart(v) ? `width:${v};height:${v};` : ""
     }
 
@@ -1644,7 +1682,7 @@ const handlers = [
 
     m = b.match(/^basis-(.+)$/)
     if (m) {
-      const v = lengthToken(b, m[1])
+      const v = lengthToken(b, m[1], { container: true })
       return v ? `flex-basis:${v};` : ""
     }
 
