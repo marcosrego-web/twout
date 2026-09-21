@@ -122,6 +122,15 @@ const breakpoints = {
   "2xl": "1536px"
 }
 
+// Variants that wrap the rule in an @media query instead of altering the
+// selector. Breakpoints keep their own map because their condition is built
+// from a width rather than being a fixed feature query.
+const mediaVariants = {
+  dark: "(prefers-color-scheme:dark)",
+  portrait: "(orientation:portrait)",
+  landscape: "(orientation:landscape)"
+}
+
 const namedColors = {
   black: "#000000",
   white: "#ffffff",
@@ -942,7 +951,7 @@ const wrapVariants = (selector, rule, variants, suffix = "") => {
             : null)
         : null
 
-    if (v in breakpoints || v === "dark") {
+    if (v in breakpoints || v in mediaVariants) {
       media.push(v)
     } else if (pseudoMap[v]) {
       sel += pseudoMap[v]
@@ -968,11 +977,8 @@ const wrapVariants = (selector, rule, variants, suffix = "") => {
 
   let css = `${sel}${suffix}{${rule}}`
   media.reverse().forEach(v => {
-    if (v === "dark") {
-      css = `@media (prefers-color-scheme:dark){${css}}`
-    } else {
-      css = `@media (min-width:${breakpoints[v]}){${css}}`
-    }
+    const condition = mediaVariants[v] || `(min-width:${breakpoints[v]})`
+    css = `@media ${condition}{${css}}`
   })
   return css
 }

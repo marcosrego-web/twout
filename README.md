@@ -145,6 +145,8 @@ Twout(classes: string[]): string
 | `["mt-4"]`                     | `.mt-4{margin-top:1rem;}`                                                                                           |
 | `["grid","grid-cols-2"]`       | `.grid{display:grid;}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr));}`                                  |
 | `["lg:grid-cols-3"]`           | `@media (min-width:1024px){.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}}`                       |
+| `["landscape:grid"]`           | `@media (orientation:landscape){.landscape\:grid{display:grid;}}`                                                   |
+| `["portrait:flex-col"]`        | `@media (orientation:portrait){.portrait\:flex-col{flex-direction:column;}}`                                       |
 | `["hover:bg-blue-500"]`        | `.hover\:bg-blue-500:hover{background-color:#3b82f6;}`                                                              |
 | `["bg-[red]"]`                 | `.bg-\[red\]{background-color:red;}`                                                                                |
 | `["bg-(primary)"]`             | `.bg-\(primary\){background-color:var(--primary);}`                                                                 |
