@@ -2674,13 +2674,29 @@ export default function Twout(classes) {
   let css = ""
   usedKeyframes = new Set()
 
-  // Normalize classes: dedupe and reorder by breakpoint groups.
-  // Groups order: none, sm, md, lg, xl, 2xl
-  const bpOrder = ["", "sm:", "md:", "lg:", "xl:", "2xl:"]
+  // Normalize classes: dedupe and reorder by variant groups.
+  // An @media wrapper adds no specificity, so a variant beats its unprefixed
+  // counterpart only by being emitted later. Emitting in Tailwind's variant
+  // order - none, orientation, dark, then breakpoints - makes the winner
+  // independent of the order the caller listed the classes in.
+  const variantOrder = [
+    "",
+    "portrait:",
+    "landscape:",
+    "dark:",
+    "sm:",
+    "md:",
+    "lg:",
+    "xl:",
+    "2xl:"
+  ]
 
   const seen = new Set()
   const groups = {
     "": [],
+    "portrait:": [],
+    "landscape:": [],
+    "dark:": [],
     "sm:": [],
     "md:": [],
     "lg:": [],
@@ -2691,16 +2707,17 @@ export default function Twout(classes) {
   ;(classes || []).forEach(c => {
     if (!c) return
     const raw = String(c)
-    // Identify breakpoint prefix (first part ending with ':') if it's one of our known bps
+    // Identify the leading variant (first part ending with ':') when it names
+    // one of the groups we order.
     const m = raw.match(/^([a-z0-9-]+:)/i)
-    const prefix = m && bpOrder.includes(m[1]) ? m[1] : ""
+    const prefix = m && variantOrder.includes(m[1]) ? m[1] : ""
     if (!seen.has(raw)) {
       seen.add(raw)
       groups[prefix].push(raw)
     }
   })
 
-  const normalizedClasses = bpOrder.flatMap(bp => groups[bp] || [])
+  const normalizedClasses = variantOrder.flatMap(v => groups[v] || [])
 
   normalizedClasses.forEach(raw => {
     let isImportant =
