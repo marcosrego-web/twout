@@ -647,8 +647,15 @@ const gradientDirections = {
 }
 
 // ---- helpers ----
+// A CSS identifier may not start with a digit, so ".2xl\:..." is invalid and
+// the browser drops the whole rule. A leading digit goes out as a hex escape
+// instead - "2xl:" becomes "\32 xl\:", the form Tailwind emits. The trailing
+// space terminates the escape and is not part of the name.
 const escapeClass = cls =>
-  "." + cls.replace(/([!\"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1")
+  "." +
+  cls
+    .replace(/([!\"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1")
+    .replace(/^(-?)(\d)/, (_, dash, digit) => `${dash}\\3${digit} `)
 
 const fracToPercent = num => {
   const [a, b] = num.split("/")
