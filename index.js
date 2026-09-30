@@ -722,6 +722,17 @@ const getArbitrary = (cls, bracket) => {
 const toVarRef = token =>
   `var(${token.startsWith("--") ? token : `--${token}`})`
 
+// A custom-property shorthand may name the value's type when the utility
+// reads more than one kind from the same slot, e.g. border-(length:--w) is a
+// width where border-(--c) is a colour. A property name holds no colon, so
+// the first one always separates the hint from the name.
+const readTypeHint = token => {
+  const i = token.indexOf(":")
+  return i === -1
+    ? { hint: null, name: token }
+    : { hint: token.slice(0, i), name: token.slice(i + 1) }
+}
+
 const colorValue = token => {
   if (namedColors[token]) return namedColors[token]
   if (/^#([0-9a-f]{3,8})$/i.test(token)) return token
@@ -2047,8 +2058,12 @@ const handlers = [
       const val = m[2]
 
       if (!val) return sized(base, "1px")
-      if (val.startsWith("("))
-        return `${base}-color:${toVarRef(getArbitrary(b, "("))};`
+      if (val.startsWith("(")) {
+        const { hint, name } = readTypeHint(getArbitrary(b, "("))
+        if (hint === "length") return sized(base, toVarRef(name))
+        if (hint && hint !== "color") return ""
+        return `${base}-color:${toVarRef(name)};`
+      }
       // An arbitrary value has to be read decoded before deciding whether it
       // is a width or a colour, and "1px 2px" is still a width.
       if (val.startsWith("[")) {
@@ -2066,8 +2081,12 @@ const handlers = [
     m = b.match(/^border-(.+)$/)
     if (m) {
       const val = m[1]
-      if (val.startsWith("("))
-        return `border-color:${toVarRef(getArbitrary(b, "("))};`
+      if (val.startsWith("(")) {
+        const { hint, name } = readTypeHint(getArbitrary(b, "("))
+        if (hint === "length") return sized("border", toVarRef(name))
+        if (hint && hint !== "color") return ""
+        return `border-color:${toVarRef(name)};`
+      }
       if (val.startsWith("[")) {
         const inner = getArbitrary(b, "[")
         return inner.split(/\s+/).every(hasNumValue)
