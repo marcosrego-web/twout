@@ -131,6 +131,44 @@ const mediaVariants = {
   landscape: "(orientation:landscape)"
 }
 
+// Container query variants: @md, @min-md, @max-md, @min-[475px], @max-[960px]
+// and @[475px], each optionally aimed at a named container with "/name"
+// (@md/main). Their sizes are the containerSizes scale. Returns the at-rule
+// prelude plus what the ordering pass needs, or null for anything else.
+// Range syntax gives @max-* Tailwind's strict "<", which max-width can't.
+function containerVariant(v) {
+  if (!v.startsWith("@")) return null
+  let token = v.slice(1)
+  let name = ""
+  const slash = token.lastIndexOf("/")
+  if (slash > 0 && !token.slice(slash).includes("]")) {
+    name = token.slice(slash + 1)
+    token = token.slice(0, slash)
+  }
+  const max = token.startsWith("max-")
+  if (max || token.startsWith("min-")) token = token.slice(4)
+
+  let width = null
+  if (token.startsWith("[") && token.endsWith("]"))
+    width = decodeArbitraryValue(token.slice(1, -1)) || null
+  else if (Object.hasOwn(containerSizes, token)) width = containerSizes[token]
+  if (!width || (name && !/^[\w-]+$/.test(name))) return null
+
+  return {
+    atRule: `@container ${name ? `${name} ` : ""}(width${max ? "<" : ">="}${width})`,
+    max,
+    px: lengthToPx(width)
+  }
+}
+
+// rem/em count as 16px - enough to sort container sizes against each other.
+// Anything else (calc(), %) has no fixed size and returns null.
+function lengthToPx(value) {
+  const m = value.match(/^(\d*\.?\d+)(px|rem|em)$/)
+  if (!m) return null
+  return Number(m[1]) * (m[2] === "px" ? 1 : 16)
+}
+
 const namedColors = {
   black: "#000000",
   white: "#ffffff",
@@ -521,6 +559,12 @@ const translateValue =
 
 const scaleValue = "var(--tw-scale-x,1) var(--tw-scale-y,1) var(--tw-scale-z,)"
 
+// scrollbar-color needs both colours, so an empty fallback would void the
+// whole declaration. #0000 is the initial value Tailwind registers for each
+// slot, which leaves the unset side transparent.
+const scrollbarColorValue =
+  "var(--tw-scrollbar-thumb,#0000) var(--tw-scrollbar-track,#0000)"
+
 const transitionProperties =
   "color, background-color, border-color, outline-color," +
   " text-decoration-color, fill, stroke, --tw-gradient-from," +
@@ -674,10 +718,34 @@ const opacityToDec = n => {
   return Math.max(0, Math.min(100, v)) / 100 + ""
 }
 
-function decodeArbitraryValue(value) {
+// keepQuoted leaves underscores inside '...' or "..." untouched. Selectors
+// want that - [src*="object_center"] matches a literal underscore far more
+// often than a space - while values keep Tailwind's rule so
+// content-['Hello_World'] still reads "Hello World". "\_" decodes to "_"
+// either way, so the escaped form keeps working inside quotes too.
+function decodeArbitraryValue(value, keepQuoted = false) {
   let out = ""
   let i = 0
   while (i < value.length) {
+    if (keepQuoted && (value[i] === '"' || value[i] === "'")) {
+      const quote = value[i]
+      out += quote
+      i += 1
+      while (i < value.length && value[i] !== quote) {
+        if (value[i] === "\\" && i + 1 < value.length) {
+          out += value[i + 1] === "_" ? "_" : value.slice(i, i + 2)
+          i += 2
+          continue
+        }
+        out += value[i]
+        i += 1
+      }
+      if (i < value.length) {
+        out += quote
+        i += 1
+      }
+      continue
+    }
     if (value.startsWith("url(", i)) {
       const start = i
       let depth = 0
@@ -711,6 +779,8 @@ function decodeArbitraryValue(value) {
   }
   return out
 }
+
+const decodeArbitrarySelector = value => decodeArbitraryValue(value, true)
 
 const getArbitrary = (cls, bracket) => {
   const re = bracket === "[" ? /\[(.*?)\]/ : /\((.*?)\)/
@@ -764,6 +834,8 @@ const colorProperties = new Set([
   "accent-color",
   "caret-color",
   "column-rule-color",
+  "--tw-scrollbar-thumb",
+  "--tw-scrollbar-track",
   "fill",
   "stroke",
   "--tw-shadow-color",
@@ -887,15 +959,15 @@ function resolveRelativeAmpersand(inner) {
 
 function bracketVariantFragment(v) {
   if (v.startsWith("has-[")) {
-    const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+    const inner = decodeArbitrarySelector(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
     return `:has(${resolveRelativeAmpersand(inner)})`
   }
   if (v.startsWith("is-[")) {
-    const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+    const inner = decodeArbitrarySelector(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
     return `:is(${resolveRelativeAmpersand(inner)})`
   }
   if (v.startsWith("not-[")) {
-    const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+    const inner = decodeArbitrarySelector(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
     return `:not(${resolveRelativeAmpersand(inner)})`
   }
   return null
@@ -932,7 +1004,7 @@ function relativeVariantSelector(v) {
   if (fragment) return wrap(parent + fragment)
 
   if (state.startsWith("[") && state.endsWith("]")) {
-    const inner = decodeArbitraryValue(state.slice(1, -1))
+    const inner = decodeArbitrarySelector(state.slice(1, -1))
     if (!inner) return null
     return wrap(inner.includes("&") ? inner.replaceAll("&", parent) : parent + inner)
   }
@@ -955,10 +1027,16 @@ function relativeVariantSelector(v) {
 }
 
 const wrapVariants = (selector, rule, variants, suffix = "") => {
-  const media = []
+  const atRules = []
   let sel = selector
 
   variants.forEach(v => {
+    const container = containerVariant(v)
+    if (container) {
+      atRules.push(container.atRule)
+      return
+    }
+
     const fragment = bracketVariantFragment(v)
     const notPseudo = pseudoMap[v.slice(4)]
     const notFragment =
@@ -970,7 +1048,7 @@ const wrapVariants = (selector, rule, variants, suffix = "") => {
         : null
 
     if (v in breakpoints || v in mediaVariants) {
-      media.push(v)
+      atRules.push(`@media ${mediaVariants[v] || `(min-width:${breakpoints[v]})`}`)
     } else if (pseudoMap[v]) {
       sel += pseudoMap[v]
     } else if (/^nth-(\d+)$/.test(v)) {
@@ -984,7 +1062,7 @@ const wrapVariants = (selector, rule, variants, suffix = "") => {
     } else if (notFragment) {
       sel += `:not(${notFragment})`
     } else if (v.startsWith("[") && v.includes("&")) {
-      const inner = decodeArbitraryValue(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+      const inner = decodeArbitrarySelector(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
       sel = inner.replaceAll("&", sel)
     } else if (relativeVariantSelector(v)) {
       sel += relativeVariantSelector(v)
@@ -994,9 +1072,8 @@ const wrapVariants = (selector, rule, variants, suffix = "") => {
   })
 
   let css = `${sel}${suffix}{${rule}}`
-  media.reverse().forEach(v => {
-    const condition = mediaVariants[v] || `(min-width:${breakpoints[v]})`
-    css = `@media ${condition}{${css}}`
+  atRules.reverse().forEach(atRule => {
+    css = `${atRule}{${css}}`
   })
   return css
 }
@@ -1254,6 +1331,15 @@ const handlers = [
       "inline-grid": "display:inline-grid;",
       hidden: "display:none;"
     }[b] || ""),
+
+  // container-type: @container, @container-size and @container-normal, each
+  // with an optional "/name" that the @md/name variants can target.
+  b => {
+    const m = b.match(/^@container(?:-(size|normal))?(?:\/([\w-]+))?$/)
+    if (!m) return ""
+    const type = m[1] || "inline-size"
+    return `container-type:${type};` + (m[2] ? `container-name:${m[2]};` : "")
+  },
 
   // visibility
   b =>
@@ -2510,6 +2596,16 @@ const handlers = [
       "scroll-auto": "scroll-behavior: auto;",
       "scroll-smooth": "scroll-behavior: smooth;",
 
+      // scrollbar-width
+      "scrollbar-auto": "scrollbar-width:auto;",
+      "scrollbar-thin": "scrollbar-width:thin;",
+      "scrollbar-none": "scrollbar-width:none;",
+
+      // scrollbar-gutter
+      "scrollbar-gutter-auto": "scrollbar-gutter:auto;",
+      "scrollbar-gutter-stable": "scrollbar-gutter:stable;",
+      "scrollbar-gutter-both": "scrollbar-gutter:stable both-edges;",
+
       "pointer-events-auto": "pointer-events:auto;",
       "pointer-events-none": "pointer-events:none;",
 
@@ -2575,9 +2671,22 @@ const handlers = [
       "snap-proximity": "--tw-scroll-snap-strictness:proximity;"
     }[b] || ""),
 
+  // scrollbar-color: thumb and track each fill one slot and re-declare the
+  // pair, so scrollbar-thumb-* and scrollbar-track-* stack.
+  b => {
+    const m = b.match(/^scrollbar-(thumb|track)-(.+)$/)
+    if (!m) return ""
+    const color = m[2] === "inherit" ? "inherit" : utilityColor(b, m[2])
+    if (!color) return ""
+    return (
+      `--tw-scrollbar-${m[1]}:${color};` +
+      `scrollbar-color:${scrollbarColorValue};`
+    )
+  },
+
   // scroll-margin & scroll-padding
   b => {
-    const m = b.match(/^scroll-(m|p)([trblxyse]?)-(.+)$/)
+    const m = b.match(/^scroll-(m|p)(bs|be|[trblxyse]?)-(.+)$/)
     if (!m) return ""
     const [, type, axis, token] = m
     const propBase = type === "p" ? "scroll-padding" : "scroll-margin"
@@ -2595,7 +2704,9 @@ const handlers = [
       b: "bottom",
       l: "left",
       s: "inline-start",
-      e: "inline-end"
+      e: "inline-end",
+      bs: "block-start",
+      be: "block-end"
     }
     return set(map[axis])
   },
@@ -2730,20 +2841,41 @@ export default function Twout(classes) {
     "2xl:": []
   }
 
+  // Container queries come after the breakpoints, as in Tailwind: @max-* from
+  // widest to narrowest, then @min-* from narrowest to widest, so the tighter
+  // query wins. Their sizes are open-ended (@min-[475px]), so they are sorted
+  // by width rather than kept in fixed groups. An unmeasurable size such as
+  // calc() keeps its listed place at the end of its group.
+  const containerClasses = []
+
   ;(classes || []).forEach(c => {
     if (!c) return
     const raw = String(c)
+    if (seen.has(raw)) return
+    seen.add(raw)
+    const lead = raw.startsWith("@") ? smartSplit(raw) : []
+    const container = lead.length > 1 && containerVariant(lead[0])
+    if (container) {
+      containerClasses.push({ raw, ...container })
+      return
+    }
     // Identify the leading variant (first part ending with ':') when it names
     // one of the groups we order.
     const m = raw.match(/^([a-z0-9-]+:)/i)
     const prefix = m && variantOrder.includes(m[1]) ? m[1] : ""
-    if (!seen.has(raw)) {
-      seen.add(raw)
-      groups[prefix].push(raw)
-    }
+    groups[prefix].push(raw)
   })
 
-  const normalizedClasses = variantOrder.flatMap(v => groups[v] || [])
+  const containerRank = c =>
+    c.px === null ? Number.MAX_VALUE : c.max ? -c.px : c.px
+  containerClasses.sort(
+    (a, b) => b.max - a.max || containerRank(a) - containerRank(b)
+  )
+
+  const normalizedClasses = [
+    ...variantOrder.flatMap(v => groups[v] || []),
+    ...containerClasses.map(c => c.raw)
+  ]
 
   normalizedClasses.forEach(raw => {
     let isImportant =

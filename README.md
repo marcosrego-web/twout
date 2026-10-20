@@ -147,6 +147,10 @@ Twout(classes: string[]): string
 | `["lg:grid-cols-3"]`           | `@media (min-width:1024px){.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}}`                       |
 | `["landscape:grid"]`           | `@media (orientation:landscape){.landscape\:grid{display:grid;}}`                                                   |
 | `["portrait:flex-col"]`        | `@media (orientation:portrait){.portrait\:flex-col{flex-direction:column;}}`                                       |
+| `["@container"]`               | `.\@container{container-type:inline-size;}`                                                                         |
+| `["@md:flex-row"]`             | `@container (width>=28rem){.\@md\:flex-row{flex-direction:row;}}`                                                   |
+| `["@max-md:flex-col"]`         | `@container (width<28rem){.\@max-md\:flex-col{flex-direction:column;}}`                                             |
+| `["@sm/main:flex-col"]`        | `@container main (width>=24rem){.\@sm\/main\:flex-col{flex-direction:column;}}`                                     |
 | `["hover:bg-blue-500"]`        | `.hover\:bg-blue-500:hover{background-color:#3b82f6;}`                                                              |
 | `["bg-[red]"]`                 | `.bg-\[red\]{background-color:red;}`                                                                                |
 | `["bg-(primary)"]`             | `.bg-\(primary\){background-color:var(--primary);}`                                                                 |
