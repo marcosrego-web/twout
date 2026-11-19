@@ -127,11 +127,43 @@ console.log(css);
 ### Function Signature
 
 ```js
-Twout(classes: string[]): string
+Twout(classes: string[], options?: { onWarning?: (warning) => void }): string
 ```
 
 * `classes` → Array of Tailwind-style class names
+* `options.onWarning` → Optional. Receives each warning instead of it being printed (see below)
 * Returns → CSS string
+
+---
+
+## ⚠️ Warnings
+
+Twout reports two things while compiling:
+
+| `type`                | When                                                                                                        | CSS                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `unsupported-variant` | A class uses a variant twout can't compile (e.g. `aria-checked:`). `warning.variant` names it.              | None for that class    |
+| `focus-inside-has`    | A class's selector puts `:focus`, `:focus-within` or `:focus-visible` inside `:has()`, e.g. `has-[a:focus]:` | Generated as usual     |
+
+An unsupported variant used to be written out as an invalid selector, which browsers drop. If a minifier
+later merges that rule with others that have the same declarations, the browser drops the whole merged
+rule. Twout now skips such classes instead.
+
+`:focus` inside `:has()` is valid, but in Chrome it can make every focus change restyle large parts of the
+page, which hurts interaction speed (INP). When the elements the `:has()` looks for are the only focusable
+content, `focus-within:` matches the same focus states without it: write `has-[a:hover]:x focus-within:x`
+instead of `has-[a:hover,a:focus]:x`.
+
+By default each distinct warning is printed once per process with `console.warn`. To collect warnings
+instead (for a build report or a test):
+
+```js
+const warnings = [];
+const css = Twout(classes, { onWarning: w => warnings.push(w) });
+// w = { type, className, message, variant?, selector? }
+```
+
+Classes with no matching utility (e.g. your own `card` or `js-toggle`) emit nothing and are not reported.
 
 ---
 
@@ -142,7 +174,7 @@ Twout(classes: string[]): string
 | Classes                        | CSS Output                                                                                                          |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | `["text-center"]`              | `.text-center{text-align:center;}`                                                                                  |
-| `["mt-4"]`                     | `.mt-4{margin-top:1rem;}`                                                                                           |
+| `["mt-4"]`                     | `.mt-4{margin-top:calc(var(--spacing,0.25rem) * 4);}`                                                               |
 | `["grid","grid-cols-2"]`       | `.grid{display:grid;}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr));}`                                  |
 | `["lg:grid-cols-3"]`           | `@media (min-width:1024px){.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}}`                       |
 | `["landscape:grid"]`           | `@media (orientation:landscape){.landscape\:grid{display:grid;}}`                                                   |
@@ -156,6 +188,10 @@ Twout(classes: string[]): string
 | `["bg-(primary)"]`             | `.bg-\(primary\){background-color:var(--primary);}`                                                                 |
 | `["has-[img]:grid"]`           | `.has-\[img\]\:grid:has(img){display:grid;}`                                                                        |
 | `["lg:has-[img]:grid-cols-2"]` | `@media (min-width:1024px){.lg\:has-\[img\]\:grid-cols-2:has(img){grid-template-columns:repeat(2,minmax(0,1fr));}}` |
+| `["has-checked:underline"]`    | `.has-checked\:underline:has(:checked){text-decoration-line:underline;}`                                            |
+| `["group-has-checked:flex"]`   | `.group-has-checked\:flex:is(:where(.group):has(:checked) *){display:flex;}`                                        |
+| `["in-focus:underline"]`       | `:where(:focus) .in-focus\:underline{text-decoration-line:underline;}`                                              |
+| `["peer-invalid:visible"]`     | `.peer-invalid\:visible:is(:where(.peer):invalid ~ *){visibility:visible;}`                                         |
 
 ---
 

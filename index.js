@@ -919,9 +919,46 @@ const pseudoMap = {
   enabled: ":enabled",
   checked: ":checked",
   "placeholder-shown": ":placeholder-shown",
+  indeterminate: ":indeterminate",
+  default: ":default",
+  optional: ":optional",
+  required: ":required",
+  valid: ":valid",
+  invalid: ":invalid",
+  "user-valid": ":user-valid",
+  "user-invalid": ":user-invalid",
+  "in-range": ":in-range",
+  "out-of-range": ":out-of-range",
+  "read-only": ":read-only",
+  autofill: ":autofill",
+  // Bare :open is recent (2025), so older browsers can't parse it and drop the
+  // rule - and any selector list a minifier merged it into. [open] covers
+  // <details> and <dialog> everywhere, :popover-open covers popovers, and
+  // :is() skips the names a browser doesn't know instead of failing.
+  open: ":is([open],:popover-open,:open)",
   "*": " > *",
   "**": " *"
 } //Some are missing //Check: https://tailwindcss.com/docs/hover-focus-and-other-states#pseudo-class-reference
+
+// Valid CSS that twout has always passed through as ":name" although Tailwind
+// has no such variant: the legacy one-colon pseudo-elements, a few standard
+// pseudo-classes and functional ones such as nth-child(2n). Kept so classes
+// already using them compile unchanged. They apply to the element itself
+// only - first-letter is a pseudo-element, and the rest aren't Tailwind
+// states - so has-/not-/group-/peer-/in- don't accept them.
+const passthroughVariants = new Set([
+  "first-letter",
+  "first-line",
+  "read-write",
+  "link",
+  "any-link",
+  "defined",
+  "fullscreen",
+  "modal",
+  "popover-open"
+])
+const passthroughFunctional =
+  /^(?:nth-child|nth-last-child|nth-of-type|nth-last-of-type|is|where|not|has|lang|dir)\(.+\)$/
 
 function hasNumValue(token = "") {
   if (!token) return false
@@ -1000,82 +1037,196 @@ function relativeVariantSelector(v) {
   const combinator = kind === "group" ? " " : " ~ "
   const wrap = state => `:is(${state}${combinator}*)`
 
-  const fragment = bracketVariantFragment(state)
-  if (fragment) return wrap(parent + fragment)
-
+  // An arbitrary selector list has to become one compound before the
+  // combinator is added, or the combinator only reaches its last item:
+  // ":where(.group):hover,:focus-within *" styles every descendant of any
+  // focused-within element on the page, .group or not.
   if (state.startsWith("[") && state.endsWith("]")) {
     const inner = decodeArbitrarySelector(state.slice(1, -1))
     if (!inner) return null
-    return wrap(inner.includes("&") ? inner.replaceAll("&", parent) : parent + inner)
+    if (inner.includes("&")) return wrap(asCompound(inner.replaceAll("&", parent)))
+    return wrap(parent + (isSelectorList(inner) ? `:is(${inner})` : inner))
   }
 
-  if (state.startsWith("not-")) {
-    const inner = state.slice(4)
-    const negated = bracketVariantFragment(inner) || pseudoMap[inner]
-    if (negated && negated.startsWith(":") && !negated.startsWith("::"))
-      return wrap(`${parent}:not(${negated})`)
-    return null
-  }
-
-  const pseudo = pseudoMap[state]
-  // Only real pseudo-classes qualify - "::before" and the "*"/"**" child
-  // shorthands describe the element itself, not an ancestor/sibling state.
-  if (pseudo && pseudo.startsWith(":") && !pseudo.startsWith("::"))
-    return wrap(parent + pseudo)
-
-  return null
+  const fragment = stateFragment(state)
+  return fragment ? wrap(parent + fragment) : null
 }
 
+// A variant that narrows the element itself - a pseudo-class, :nth-child(),
+// has-*, not-*, group-*, peer-* - as a fragment appended to its selector.
+// These are the variants that has-/not-/group-/peer-/in- accept. Returns null
+// for anything else: pseudo-elements and the "*"/"**" child shorthands
+// describe another element, and media queries aren't selectors at all.
+function stateFragment(v) {
+  if (Object.hasOwn(pseudoMap, v)) {
+    const pseudo = pseudoMap[v]
+    return pseudo.startsWith(":") && !pseudo.startsWith("::") ? pseudo : null
+  }
+  let m = v.match(/^nth-(\d+)$/)
+  if (m) return `:nth-child(${m[1]})`
+  if ((m = v.match(/^nth-last-(\d+)$/))) return `:nth-last-child(${m[1]})`
+
+  const bracket = bracketVariantFragment(v)
+  if (bracket) return bracket
+
+  if (v.startsWith("not-")) {
+    const inner = stateFragment(v.slice(4))
+    return inner ? `:not(${inner})` : null
+  }
+  // has-checked: "has a descendant that is checked". CSS forbids a :has()
+  // inside another, so has-has-* and has-group-has-* are refused rather than
+  // emitted as a selector every browser drops.
+  if (v.startsWith("has-")) {
+    const inner = stateFragment(v.slice(4))
+    return inner && !inner.includes(":has(") ? `:has(${inner})` : null
+  }
+  return relativeVariantSelector(v)
+}
+
+// in-* variants style an element while any ancestor is in a state or matches
+// a selector - group-* without needing a .group class. Returns that ancestor
+// condition, for the caller to put in front as ":where(condition) ".
+function inVariantCondition(v) {
+  if (!v.startsWith("in-")) return null
+  const state = v.slice(3)
+  if (state.startsWith("[") && state.endsWith("]")) {
+    const inner = decodeArbitrarySelector(state.slice(1, -1)).trim()
+    // A relative selector ("> img") or an at-rule has no ancestor to be in.
+    if (!inner || /^[>+~@]/.test(inner)) return null
+    const condition = resolveRelativeAmpersand(inner)
+    return isSelectorList(condition) ? `:is(${condition})` : condition
+  }
+  return stateFragment(state)
+}
+
+// Reduces a selector to its outermost level: escapes, quoted strings and
+// anything inside () or [] are dropped. That's where a top-level comma or
+// combinator would show. Escapes matter here - "2xl:" goes out as "\32 xl\:",
+// and that space ends the escape; it is not a descendant combinator.
+function selectorTopLevel(sel) {
+  let out = ""
+  let depth = 0
+  for (let i = 0; i < sel.length; i++) {
+    const ch = sel[i]
+    if (ch === "\\") {
+      const hex = sel.slice(i + 1, i + 8).match(/^[0-9a-f]{1,6}\s?/i)
+      i += hex ? hex[0].length : 1
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      while (++i < sel.length && sel[i] !== ch) if (sel[i] === "\\") i++
+      continue
+    }
+    if (ch === "(" || ch === "[") depth++
+    else if (ch === ")" || ch === "]") depth--
+    else if (depth === 0) out += ch
+  }
+  return out
+}
+
+const isSelectorList = sel => selectorTopLevel(sel).includes(",")
+
+// More than one compound: a list, or compounds joined by a combinator.
+const isComplexSelector = sel => /[\s,>~+]/.test(selectorTopLevel(sel).trim())
+
+// Makes a selector list one compound, so whatever is appended next - a
+// pseudo-class, ::after, a child combinator - applies to every item of it
+// and not just the last. A single selector is returned untouched.
+const asCompound = sel => (isSelectorList(sel) ? `:is(${sel})` : sel)
+
+// True when :focus, :focus-within or :focus-visible sits anywhere inside a
+// :has(), however deeply - :has(a:not(.x):focus) counts. Escaped characters
+// are skipped, so a class name such as "has-\[a\:focus\]" is not mistaken
+// for one, and so are quoted attribute values.
+function focusInsideHas(sel) {
+  const opens = [] // one entry per open "(": whether it opened a :has()
+  let hasDepth = 0
+  for (let i = 0; i < sel.length; i++) {
+    const ch = sel[i]
+    if (ch === "\\") {
+      i++
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      while (++i < sel.length && sel[i] !== ch) if (sel[i] === "\\") i++
+      continue
+    }
+    if (ch === "(") {
+      const opensHas = sel.slice(Math.max(0, i - 4), i).toLowerCase() === ":has"
+      opens.push(opensHas)
+      if (opensHas) hasDepth++
+    } else if (ch === ")") {
+      if (opens.pop()) hasDepth--
+    } else if (hasDepth > 0 && sel.startsWith(":focus", i)) {
+      return true
+    }
+  }
+  return false
+}
+
+// Applies a class's variants to its selector, left to right as Tailwind 4
+// does. Returns { css, selector }, or { unsupported: variant } for a variant
+// twout doesn't know: writing it out as ":variant" would be an invalid
+// selector, which browsers drop - along with every other selector a minifier
+// may have merged into the same rule.
 const wrapVariants = (selector, rule, variants, suffix = "") => {
   const atRules = []
   let sel = selector
 
-  variants.forEach(v => {
+  for (const v of variants) {
     const container = containerVariant(v)
     if (container) {
       atRules.push(container.atRule)
-      return
+      continue
     }
-
-    const fragment = bracketVariantFragment(v)
-    const notPseudo = pseudoMap[v.slice(4)]
-    const notFragment =
-      !fragment && v.startsWith("not-")
-        ? bracketVariantFragment(v.slice(4)) ||
-          (notPseudo && notPseudo.startsWith(":") && !notPseudo.startsWith("::")
-            ? notPseudo
-            : null)
-        : null
-
-    if (v in breakpoints || v in mediaVariants) {
+    if (Object.hasOwn(breakpoints, v) || Object.hasOwn(mediaVariants, v)) {
       atRules.push(`@media ${mediaVariants[v] || `(min-width:${breakpoints[v]})`}`)
-    } else if (pseudoMap[v]) {
-      sel += pseudoMap[v]
-    } else if (/^nth-(\d+)$/.test(v)) {
-      const n = v.match(/^nth-(\d+)$/)[1]
-      sel += `:nth-child(${n})`
-    } else if (/^nth-last-(\d+)$/.test(v)) {
-      const n = v.match(/^nth-last-(\d+)$/)[1]
-      sel += `:nth-last-child(${n})`
-    } else if (fragment) {
-      sel += fragment
-    } else if (notFragment) {
-      sel += `:not(${notFragment})`
-    } else if (v.startsWith("[") && v.includes("&")) {
-      const inner = decodeArbitrarySelector(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
-      sel = inner.replaceAll("&", sel)
-    } else if (relativeVariantSelector(v)) {
-      sel += relativeVariantSelector(v)
-    } else {
-      sel += `:${v}` // fallback (keeps original behavior)
+      continue
     }
-  })
+    if (Object.hasOwn(pseudoMap, v)) {
+      sel = asCompound(sel) + pseudoMap[v]
+      continue
+    }
+    if (passthroughVariants.has(v) || passthroughFunctional.test(v)) {
+      sel = `${asCompound(sel)}:${v}`
+      continue
+    }
+    if (v.startsWith("[") && v.includes("&")) {
+      const inner = decodeArbitrarySelector(v.substring(v.indexOf("[") + 1, v.lastIndexOf("]")))
+      sel = inner.replaceAll("&", asCompound(sel))
+      continue
+    }
+    // in-* puts the ancestor in front, so a list or a selector that already
+    // has a combinator is wrapped first: ":where(.a) .x .y" would demand .a
+    // be an ancestor of .x, not merely of .y.
+    const ancestor = inVariantCondition(v)
+    if (ancestor) {
+      sel = `:where(${ancestor}) ${isComplexSelector(sel) ? `:is(${sel})` : sel}`
+      continue
+    }
+    const fragment = stateFragment(v)
+    if (fragment) {
+      sel = asCompound(sel) + fragment
+      continue
+    }
+    return { unsupported: v }
+  }
 
-  let css = `${sel}${suffix}{${rule}}`
+  let css = `${suffix ? asCompound(sel) : sel}${suffix}{${rule}}`
   atRules.reverse().forEach(atRule => {
     css = `${atRule}{${css}}`
   })
-  return css
+  return { css, selector: sel }
+}
+
+// Warnings go to options.onWarning when given; otherwise each distinct one is
+// printed once per process, so a site compiling the same classes for every
+// page doesn't repeat itself.
+const printedWarnings = new Set()
+const printWarning = warning => {
+  if (printedWarnings.has(warning.message)) return
+  printedWarnings.add(warning.message)
+  console.warn(`[twout] ${warning.message}`)
 }
 
 // Splits on a separator that sits outside any bracket.
@@ -2807,9 +2958,18 @@ const handlers = [
 ]
 
 // ---- main ----
-export default function Twout(classes) {
+// options.onWarning(warning) receives what twout flags while compiling -
+// { type, className, message, ... } - instead of it going to console.warn:
+//   "unsupported-variant": the class has a variant twout can't compile, so
+//     no CSS was generated for it (warning.variant names it);
+//   "focus-inside-has": the class's selector puts :focus, :focus-within or
+//     :focus-visible inside :has() (warning.selector); the CSS is still
+//     generated.
+export default function Twout(classes, options = {}) {
   let css = ""
   usedKeyframes = new Set()
+  const warn =
+    typeof options?.onWarning === "function" ? options.onWarning : printWarning
 
   // Normalize classes: dedupe and reorder by variant groups.
   // An @media wrapper adds no specificity, so a variant beats its unprefixed
@@ -2907,6 +3067,9 @@ export default function Twout(classes) {
 
     let rule = ""
     let suffix = ""
+    // animate-* registers its @keyframes while resolving; remember where this
+    // class's additions start so they can be taken back if it is skipped.
+    const keyframesBefore = usedKeyframes.size
 
     const mod = splitOpacityModifier(base)
     if (mod) {
@@ -2930,9 +3093,32 @@ export default function Twout(classes) {
       }
     }
 
-    if (rule) {
-      rule = applyFlag(rule, isNegative, isImportant)
-      css += wrapVariants(selector, rule, variants, suffix)
+    // A token with no known utility emits nothing and isn't reported: CMS
+    // class lists legitimately carry non-Tailwind classes.
+    if (!rule) return
+
+    rule = applyFlag(rule, isNegative, isImportant)
+    const out = wrapVariants(selector, rule, variants, suffix)
+    if (out.unsupported) {
+      warn({
+        type: "unsupported-variant",
+        className: raw,
+        variant: out.unsupported,
+        message: `Skipped "${raw}": twout doesn't support the "${out.unsupported}:" variant, so it generated no CSS for this class.`
+      })
+      ;[...usedKeyframes]
+        .slice(keyframesBefore)
+        .forEach(name => usedKeyframes.delete(name))
+      return
+    }
+    css += out.css
+    if (focusInsideHas(out.selector)) {
+      warn({
+        type: "focus-inside-has",
+        className: raw,
+        selector: out.selector,
+        message: `"${raw}" puts :focus inside :has(). In Chrome that can make every focus change restyle large parts of the page, slowing interactions (INP). When the elements the :has() looks for are the only focusable content, focus-within: matches the same focus states without it (e.g. has-[a:hover,a:focus]:x -> has-[a:hover]:x focus-within:x).`
+      })
     }
   })
 
