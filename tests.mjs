@@ -275,9 +275,8 @@ describe("is-[...] (twout's own variant, not in Tailwind)", () => {
 describe("unsupported variants", () => {
   test("emit no CSS and report the variant", () => {
     expectSkipped("aria-checked:underline", "aria-checked")
-    expectSkipped("data-[state=open]:underline", "data-[state=open]")
-    expectSkipped("max-md:underline", "max-md")
-    expectSkipped("print:underline", "print")
+    expectSkipped("motion-safe:underline", "motion-safe")
+    expectSkipped("supports-[display:grid]:underline", "supports-[display:grid]")
     expectSkipped("inert:underline", "inert")
     expectSkipped("hover:foo:underline", "foo")
     expectSkipped("group-foo:underline", "group-foo")
@@ -395,6 +394,310 @@ describe(":focus inside :has()", () => {
     ])
       assert.deepEqual(focusWarnings(cls), [], cls)
   })
+})
+
+// ---- Compared with Tailwind v4 ----
+// Each case pairs a class with the CSS Tailwind 4.3.5 generates for it: the
+// utilities layer of @tailwindcss/node's compile('@import "tailwindcss"')
+// .build([cls]), minified by lightningcss as the Tailwind CLI and Vite plugin
+// ship it. asTwout() rewrites that in the form twout has always written, and
+// twout's output must then match it exactly. The rewrites are:
+//   - breakpoints in px, not rem (64rem -> 1024px);
+//   - every declaration ends with ";", and important is " !important";
+//   - hover: isn't wrapped in @media (hover:hover);
+//   - group-*/peer-* are ".x:is(<group> *)", Tailwind's ":is(<group> .x)";
+//   - spacing reads var(--spacing,0.25rem), and 0.5 keeps its leading zero.
+// Selectors, at-rules, properties and values are otherwise Tailwind's.
+const tailwindBreakpoints = { "40rem": "640px", "48rem": "768px", "64rem": "1024px", "80rem": "1280px", "96rem": "1536px" }
+
+function asTwout(tailwind, cls) {
+  let css = tailwind
+  if (smartVariants(cls).includes("hover")) css = unwrapAtRule(css, "@media (hover:hover){")
+  return css
+    .replace(/\(min-width:(\d+rem)\)/g, (m, rem) => (tailwindBreakpoints[rem] ? `(min-width:${tailwindBreakpoints[rem]})` : m))
+    .replace(
+      /:is\((:where\(\.(?:group|peer)[^)]*\)[^\s~]*)( |~)((?:\\.|[^\\\s{)])+)\)\{/g,
+      (_, group, combinator, x) => `${x}:is(${group}${combinator === "~" ? " ~ " : " "}*){`
+    )
+    .replace(/!important/g, " !important")
+    .replace(/([^;{}])\}/g, "$1;}")
+    .replace(/(^|[^\\]):\.(\d)/g, "$1:0.$2")
+    .replace(/var\(--spacing\)/g, "var(--spacing,0.25rem)")
+}
+
+// The variants of a class, split at the colons outside brackets.
+function smartVariants(cls) {
+  const parts = cls.split(/:(?![^[]*\])(?![^(]*\))/)
+  return parts.slice(0, -1)
+}
+
+// Removes an at-rule's prelude and its closing brace, keeping what's inside.
+function unwrapAtRule(css, prelude) {
+  const start = css.indexOf(prelude)
+  if (start === -1) return css
+  let depth = 0
+  for (let i = start + prelude.length - 1; i < css.length; i++) {
+    if (css[i] === "\\") i++
+    else if (css[i] === "{") depth++
+    else if (css[i] === "}" && --depth === 0)
+      return css.slice(0, start) + css.slice(start + prelude.length, i) + css.slice(i + 1)
+  }
+  return css
+}
+
+const sameAsTailwind = cases => {
+  for (const [cls, tailwind] of cases)
+    test(cls, () => {
+      assert.deepEqual(compile(cls), { css: asTwout(tailwind, cls), warnings: [] })
+    })
+}
+
+// Classes Tailwind 4.3.5 generates nothing for. twout emits nothing too; for
+// an invalid variant it also says so, as for any variant it can't compile.
+const expectNothing = cls => assert.deepEqual(compile(cls), { css: "", warnings: [] }, cls)
+
+describe("max-* and min-* breakpoints (Tailwind v4)", () => {
+  sameAsTailwind([
+    ["max-sm:hidden", String.raw`@media not all and (min-width:40rem){.max-sm\:hidden{display:none}}`],
+    ["max-md:hidden", String.raw`@media not all and (min-width:48rem){.max-md\:hidden{display:none}}`],
+    ["max-lg:hidden", String.raw`@media not all and (min-width:64rem){.max-lg\:hidden{display:none}}`],
+    ["max-xl:hidden", String.raw`@media not all and (min-width:80rem){.max-xl\:hidden{display:none}}`],
+    ["max-2xl:hidden", String.raw`@media not all and (min-width:96rem){.max-2xl\:hidden{display:none}}`],
+    ["lg:block", String.raw`@media (min-width:64rem){.lg\:block{display:block}}`],
+    ["min-lg:block", String.raw`@media (min-width:64rem){.min-lg\:block{display:block}}`],
+    ["min-[960px]:flex", String.raw`@media (min-width:960px){.min-\[960px\]\:flex{display:flex}}`],
+    ["max-[960px]:p-2", String.raw`@media not all and (min-width:960px){.max-\[960px\]\:p-2{padding:calc(var(--spacing) * 2)}}`],
+    ["min-[60rem]:flex", String.raw`@media (min-width:60rem){.min-\[60rem\]\:flex{display:flex}}`],
+    ["max-lg:[&_.x]:hidden", String.raw`@media not all and (min-width:64rem){.max-lg\:\[\&_\.x\]\:hidden .x{display:none}}`],
+    ["max-lg:hover:opacity-50", String.raw`@media not all and (min-width:64rem){@media (hover:hover){.max-lg\:hover\:opacity-50:hover{opacity:.5}}}`],
+    ["max-lg:mt-2!", String.raw`@media not all and (min-width:64rem){.max-lg\:mt-2\!{margin-top:calc(var(--spacing) * 2)!important}}`],
+    ["md:max-lg:flex", String.raw`@media (min-width:48rem){@media not all and (min-width:64rem){.md\:max-lg\:flex{display:flex}}}`]
+  ])
+
+  // A tiny evaluator for the two media queries breakpoints produce.
+  const appliesAt = (css, width) => {
+    const m = css.match(/^@media (not all and )?\(min-width:(\d+)px\)\{/)
+    assert.ok(m, `unexpected query in ${css}`)
+    return (width >= Number(m[2])) !== !!m[1]
+  }
+
+  test("max-*: is the exact complement of the min-width breakpoint", () => {
+    for (const [bp, px] of Object.entries({ sm: 640, md: 768, lg: 1024, xl: 1280, "2xl": 1536 })) {
+      const min = Twout([`${bp}:block`])
+      const max = Twout([`max-${bp}:hidden`])
+      for (const width of [px - 1, px - 0.5, px, px + 0.5, px + 1])
+        assert.notEqual(appliesAt(min, width), appliesAt(max, width), `${bp} at ${width}px`)
+    }
+    // The case from the request: at exactly 1024px lg: applies and max-lg: doesn't.
+    assert.equal(appliesAt(Twout(["lg:block"]), 1024), true)
+    assert.equal(appliesAt(Twout(["max-lg:hidden"]), 1024), false)
+    assert.equal(appliesAt(Twout(["max-[960px]:p-2"]), 960), false)
+    assert.equal(appliesAt(Twout(["min-[960px]:flex"]), 960), true)
+  })
+
+  test("!max-lg:mt-0 is twout's form of Tailwind's max-lg:mt-0!", () => {
+    // Tailwind 4 generates nothing for a "!" in front of the variants; twout
+    // has always accepted it (!lg:mt-0) and writes the same rule.
+    const { css, warnings } = compile("!max-lg:mt-0")
+    assert.equal(
+      css,
+      String.raw`@media not all and (min-width:1024px){.\!max-lg\:mt-0{margin-top:calc(var(--spacing,0.25rem) * 0) !important;}}`
+    )
+    assert.deepEqual(warnings, [])
+    assert.equal(css, Twout(["max-lg:mt-0!"]).replace(String.raw`.max-lg\:mt-0\!`, String.raw`.\!max-lg\:mt-0`))
+  })
+
+  test("names that aren't breakpoints are refused", () => {
+    expectSkipped("max-foo:hidden", "max-foo")
+    expectSkipped("min-foo:hidden", "min-foo")
+    expectSkipped("max-lg/x:hidden", "max-lg/x")
+    expectSkipped("max-[1px;}*{x:y]:hidden", "max-[1px;}*{x:y]")
+  })
+})
+
+describe("arbitrary at-rules (Tailwind v4)", () => {
+  sameAsTailwind([
+    ["[@media(max-width:1024px)]:hidden", String.raw`@media (max-width:1024px){.\[\@media\(max-width\:1024px\)\]\:hidden{display:none}}`],
+    ["[@media_print]:hidden", String.raw`@media print{.\[\@media_print\]\:hidden{display:none}}`],
+    ["[@supports(display:grid)]:grid", String.raw`@supports (display:grid){.\[\@supports\(display\:grid\)\]\:grid{display:grid}}`],
+    ["[@container_card_(min-width:400px)]:flex", String.raw`@container card (min-width:400px){.\[\@container_card_\(min-width\:400px\)\]\:flex{display:flex}}`],
+    ["[@media(max-width:1024px)]:max-lg:hidden", String.raw`@media (max-width:1024px){@media not all and (min-width:64rem){.\[\@media\(max-width\:1024px\)\]\:max-lg\:hidden{display:none}}}`],
+    ["max-lg:[@media(hover:hover)]:hidden", String.raw`@media not all and (min-width:64rem){@media (hover:hover){.max-lg\:\[\@media\(hover\:hover\)\]\:hidden{display:none}}}`]
+  ])
+
+  test("at-rules that can't hold a style rule, and broken ones, are refused", () => {
+    expectSkipped("[@font-face]:flex", "[@font-face]")
+    expectSkipped("[@media(x){}]:flex", "[@media(x){}]")
+    // An unclosed "(" leaves no variant to split off: an unknown class, silent.
+    expectNothing("[@media(x]:flex")
+  })
+})
+
+describe("ordering of at-rule variants", () => {
+  // The selector of each rule, unescaped, in output order.
+  const order = classes =>
+    [...Twout(classes, { onWarning() {} }).matchAll(/(?:^|[{}])(\.(?:\\.|[^{\\])*)\{/g)].map(m =>
+      m[1].replace(/\\(.)/g, "$1")
+    )
+
+  test("media rules come after base rules whatever the input order", () => {
+    const classes = ["max-lg:mt-0", "[@media(max-width:1024px)]:hidden", "print:hidden", "min-[960px]:flex", "mt-4", "block"]
+    const forward = order(classes)
+    const reversed = order([...classes].reverse())
+    // Base rules keep their listed order; the media rules are the same either way.
+    assert.deepEqual(forward.slice(0, 2), [".mt-4", ".block"])
+    assert.deepEqual(reversed.slice(0, 2), [".block", ".mt-4"])
+    assert.deepEqual(forward.slice(2), reversed.slice(2))
+    assert.equal(forward.length, 6)
+  })
+
+  test("a leading ! or a later variant doesn't hide the breakpoint", () => {
+    // 1.3.0 put these with the base rules, so !mt-4 and hover:hidden won.
+    assert.deepEqual(order(["!max-lg:mt-0", "!mt-4"]), [".!mt-4", ".!max-lg:mt-0"])
+    assert.deepEqual(order(["hover:lg:flex", "hover:hidden"]), [".hover:hidden:hover", ".hover:lg:flex:hover"])
+  })
+
+  test("as in Tailwind: max-* widest first, then min-* narrowest first, then print", () => {
+    const expected = [
+      ".block",
+      ".max-xl:block",
+      ".max-lg:block",
+      ".max-[960px]:block",
+      ".max-md:block",
+      ".md:block",
+      ".md:max-lg:block",
+      ".min-[960px]:block",
+      ".lg:block",
+      ".print:block"
+    ]
+    for (let i = 0; i < 5; i++) {
+      const shuffled = expected.map(s => s.slice(1)).sort(() => Math.random() - 0.5)
+      assert.deepEqual(order(shuffled), expected)
+    }
+  })
+
+  test("arbitrary at-rules come last; simple width queries cascade like breakpoints", () => {
+    // Narrower max-width and wider min-width come later and win, as they did
+    // in the stylesheet these queries are copied from. Tailwind sorts them
+    // by their text instead, which would put 991px after 767px.
+    const expected = [
+      ".print:block",
+      ".[@media(max-width:991px)]:block",
+      ".[@media(max-width:767px)]:block",
+      ".[@media(min-width:768px)]:block",
+      ".[@media(min-width:1200px)]:block",
+      ".[@supports(display:grid)]:block"
+    ]
+    for (let i = 0; i < 5; i++) {
+      const shuffled = expected.map(s => s.slice(1)).sort(() => Math.random() - 0.5)
+      assert.deepEqual(order(shuffled), expected)
+    }
+  })
+})
+
+describe("arbitrary properties (Tailwind v4)", () => {
+  sameAsTailwind([
+    ["[--offset-1:12.188rem]", String.raw`.\[--offset-1\:12\.188rem\]{--offset-1:12.188rem}`],
+    ["lg:[--font-size-1:3.125rem]", String.raw`@media (min-width:64rem){.lg\:\[--font-size-1\:3\.125rem\]{--font-size-1:3.125rem}}`],
+    ["[transition:var(--menu-transition)]", String.raw`.\[transition\:var\(--menu-transition\)\]{transition:var(--menu-transition)}`],
+    [
+      "[background-image:linear-gradient(var(--bg-linear-angle,90deg),transparent_0%,var(--bg-linear-to,black)_100%)]",
+      String.raw`.\[background-image\:linear-gradient\(var\(--bg-linear-angle\,90deg\)\,transparent_0\%\,var\(--bg-linear-to\,black\)_100\%\)\]{background-image:linear-gradient(var(--bg-linear-angle,90deg),transparent 0%,var(--bg-linear-to,black) 100%)}`
+    ],
+    ["hover:[--x:1]", String.raw`@media (hover:hover){.hover\:\[--x\:1\]:hover{--x:1}}`],
+    ["[&_a]:[color:red]", String.raw`.\[\&_a\]\:\[color\:red\] a{color:red}`],
+    ["![--x:1]", String.raw`.\!\[--x\:1\]{--x:1!important}`],
+    ["[--x:1]!", String.raw`.\[--x\:1\]\!{--x:1!important}`],
+    ["[-webkit-line-clamp:3]", String.raw`.\[-webkit-line-clamp\:3\]{-webkit-line-clamp:3}`],
+    ["[--my_var:a_b]", String.raw`.\[--my_var\:a_b\]{--my_var:a b}`],
+    ["[margin:var(--a_b,1px_2px)]", String.raw`.\[margin\:var\(--a_b\,1px_2px\)\]{margin:var(--a_b,1px 2px)}`],
+    [
+      "[background-image:url(data:image/svg+xml;base64,AA)]!",
+      String.raw`.\[background-image\:url\(data\:image\/svg\+xml\;base64\,AA\)\]\!{background-image:url(data:image/svg+xml;base64,AA)!important}`
+    ],
+    ["lg:[@media(hover:hover)]:[--x:1]", String.raw`@media (min-width:64rem){@media (hover:hover){.lg\:\[\@media\(hover\:hover\)\]\:\[--x\:1\]{--x:1}}}`]
+  ])
+
+  test("invalid properties and values emit nothing, as in Tailwind", () => {
+    for (const cls of ["[Color:red]", "[--x:a;b]", "[--x:a}]", "[--x:(a]", "[color:]", "-[--x:1]"]) expectNothing(cls)
+  })
+})
+
+describe("important as a suffix (Tailwind v4)", () => {
+  sameAsTailwind([
+    ["pb-2!", String.raw`.pb-2\!{padding-bottom:calc(var(--spacing) * 2)!important}`],
+    ["lg:pb-2!", String.raw`@media (min-width:64rem){.lg\:pb-2\!{padding-bottom:calc(var(--spacing) * 2)!important}}`],
+    // Tailwind's legacy prefix after the variants.
+    ["lg:!pb-2", String.raw`@media (min-width:64rem){.lg\:\!pb-2{padding-bottom:calc(var(--spacing) * 2)!important}}`],
+    ["[&_a]:text-(--light)!", String.raw`.\[\&_a\]\:text-\(--light\)\! a{color:var(--light)!important}`],
+    ["bg-[var(--brand_color)]", String.raw`.bg-\[var\(--brand_color\)\]{background-color:var(--brand_color)}`]
+  ])
+
+  test("the classes from the request", () => {
+    // Tailwind writes spacing 0 as "0"; twout keeps its calc() form.
+    const zero = "calc(var(--spacing,0.25rem) * 0) !important"
+    assert.equal(Twout(["pb-0!"]), String.raw`.pb-0\!{padding-bottom:${zero};}`)
+    assert.equal(Twout(["lg:pb-0!"]), String.raw`@media (min-width:1024px){.lg\:pb-0\!{padding-bottom:${zero};}}`)
+    // text-(light) is twout's shorthand for text-(--light); Tailwind has no such form.
+    assert.equal(Twout(["[&_a]:text-(light)!"]), String.raw`.\[\&_a\]\:text-\(light\)\! a{color:var(--light) !important;}`)
+  })
+
+  test("same rule as the ! prefix", () => {
+    for (const [suffix, prefix] of [["mt-4!", "!mt-4"], ["-mt-4!", "!-mt-4"], ["bg-red-500/50!", "!bg-red-500/50"]]) {
+      const strip = css => css.replace(/^[^{]+/, "")
+      assert.equal(strip(Twout([suffix])), strip(Twout([prefix])), suffix)
+    }
+  })
+
+  test("a negative value can follow the variants, as in Tailwind (lg:-mt-4)", () => {
+    // Tailwind writes calc(var(--spacing) * -4); twout keeps its own negation.
+    assert.equal(
+      Twout(["lg:-mt-4"]),
+      String.raw`@media (min-width:1024px){.lg\:-mt-4{margin-top:calc(calc(var(--spacing,0.25rem) * 4) * -1);}}`
+    )
+  })
+
+  test("! inside a url() or a string is left alone", () => {
+    assert.equal(
+      Twout(["!bg-[url(data:image/svg+xml;base64,AA)]"]),
+      String.raw`.\!bg-\[url\(data\:image\/svg\+xml\;base64\,AA\)\]{background-image:url(data:image/svg+xml;base64,AA) !important;}`
+    )
+  })
+})
+
+describe("data-* variants (Tailwind v4)", () => {
+  sameAsTailwind([
+    ["data-[open]:block", String.raw`.data-\[open\]\:block[data-open]{display:block}`],
+    ["data-open:block", String.raw`.data-open\:block[data-open]{display:block}`],
+    ["data-[size=2]:block", String.raw`.data-\[size\=2\]\:block[data-size="2"]{display:block}`],
+    ["group-data-[open]:block", String.raw`:is(:where(.group)[data-open] .group-data-\[open\]\:block){display:block}`],
+    ["peer-data-[open]:block", String.raw`:is(:where(.peer)[data-open]~.peer-data-\[open\]\:block){display:block}`],
+    ["group-data-[open]/menu:block", String.raw`:is(:where(.group\/menu)[data-open] .group-data-\[open\]\/menu\:block){display:block}`],
+    ["in-data-[open]:block", String.raw`:where([data-open]) .in-data-\[open\]\:block{display:block}`],
+    ["not-data-[open]:block", String.raw`.not-data-\[open\]\:block:not([data-open]){display:block}`],
+    ["has-data-[open]:block", String.raw`.has-data-\[open\]\:block:has([data-open]){display:block}`],
+    ["data-[open]:hover:block", String.raw`@media (hover:hover){.data-\[open\]\:hover\:block[data-open]:hover{display:block}}`]
+  ])
+
+  test("values are quoted as Tailwind writes them before minifying", () => {
+    // Tailwind's minifier then drops the quotes where they aren't needed.
+    expectUnderline("data-[state=open]:underline", String.raw`.data-\[state\=open\]\:underline[data-state="open"]`)
+    expectUnderline("data-[state=open_i]:underline", String.raw`.data-\[state\=open_i\]\:underline[data-state="open" i]`)
+    expectUnderline("data-[state~=open]:underline", String.raw`.data-\[state\~\=open\]\:underline[data-state~="open"]`)
+    expectUnderline("data-[state='a_b']:underline", String.raw`.data-\[state\=\'a_b\'\]\:underline[data-state='a_b']`)
+  })
+
+  test("an invalid attribute name is refused", () => {
+    expectSkipped("data-[a_b]:block", "data-[a_b]")
+    expectSkipped("data-state/x:block", "data-state/x")
+  })
+})
+
+describe("print (Tailwind v4)", () => {
+  sameAsTailwind([
+    ["print:hidden", String.raw`@media print{.print\:hidden{display:none}}`],
+    ["lg:print:hidden", String.raw`@media (min-width:64rem){@media print{.lg\:print\:hidden{display:none}}}`]
+  ])
 })
 
 describe("README examples", () => {

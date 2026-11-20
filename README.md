@@ -167,6 +167,42 @@ Classes with no matching utility (e.g. your own `card` or `js-toggle`) emit noth
 
 ---
 
+## 📐 Media queries and output order
+
+| Variant                                    | Wraps the rule in                                     |
+| ------------------------------------------ | ----------------------------------------------------- |
+| `sm:` … `2xl:`, also `min-sm:` … `min-2xl:` | `@media (min-width:640px)` … `(min-width:1536px)`    |
+| `max-sm:` … `max-2xl:`                     | `@media not all and (min-width:640px)` …              |
+| `min-[960px]:`, `max-[960px]:`             | `@media (min-width:960px)`, `@media not all and (min-width:960px)` |
+| Arbitrary: `[@media(max-width:1024px)]:`   | `@media (max-width:1024px)`, as written                |
+| `print:`                                   | `@media print`                                        |
+
+`max-*` is the exact complement of the breakpoint, as in Tailwind 4: `max-lg:` applies below 1024px and
+`lg:` from 1024px, so they never both apply. Use an arbitrary at-rule to keep a legacy query exactly,
+inclusive `max-width` included. It accepts `@media`, `@supports`, `@container`, `@layer`, `@scope` and
+`@starting-style`; `_` reads as a space (`[@media_print_and_(min-width:600px)]:`).
+
+At-rules add no specificity, so which rule wins depends on its place in the CSS. Twout places classes
+the same way whatever order you list them in: base rules, then `portrait:`, `landscape:`, `dark:`, then
+`max-*` from widest to narrowest, `sm:`…`2xl:` and `min-*` from narrowest to widest, container queries,
+`print:`, and arbitrary at-rules last. Among those, plain `max-width` queries go widest first and
+`min-width` ones narrowest first, so a narrower `max-width` still wins, as in the stylesheet it came
+from. Other at-rules keep the order you listed them in. A class is placed by all its at-rule variants:
+`hover:lg:flex` sorts with `lg:`, and `md:max-lg:flex` comes after `md:` and before `lg:`.
+
+**Important** — `mt-4!` (Tailwind 4), `!mt-4` and `lg:!mt-4` (Tailwind 3) and twout's own `!lg:mt-4` all
+add `!important`. Tailwind 4 generates nothing for `!lg:mt-4`, so prefer `lg:mt-4!` in classes that a
+real Tailwind build may also read.
+
+**Arbitrary properties** — `[--offset:12rem]`, `[transition:var(--menu)]`, with any variants. Underscores
+read as spaces except in `url()` and `var()` names. A value with a `;` or `{}` outside brackets, or with
+unbalanced brackets, generates nothing, as in Tailwind.
+
+**Data attributes** — `data-open:` and `data-[open]:` match `[data-open]`; `data-[state=open]:` matches
+`[data-state="open"]`. They combine with `group-`, `peer-`, `in-`, `has-` and `not-`.
+
+---
+
 ## ✨ Examples
 
 ### Example Output
@@ -177,6 +213,10 @@ Classes with no matching utility (e.g. your own `card` or `js-toggle`) emit noth
 | `["mt-4"]`                     | `.mt-4{margin-top:calc(var(--spacing,0.25rem) * 4);}`                                                               |
 | `["grid","grid-cols-2"]`       | `.grid{display:grid;}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr));}`                                  |
 | `["lg:grid-cols-3"]`           | `@media (min-width:1024px){.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}}`                       |
+| `["max-lg:hidden"]`            | `@media not all and (min-width:1024px){.max-lg\:hidden{display:none;}}`                                             |
+| `["min-[960px]:flex"]`         | `@media (min-width:960px){.min-\[960px\]\:flex{display:flex;}}`                                                     |
+| `["[@media(max-width:1024px)]:hidden"]` | `@media (max-width:1024px){.\[\@media\(max-width\:1024px\)\]\:hidden{display:none;}}`                      |
+| `["print:hidden"]`             | `@media print{.print\:hidden{display:none;}}`                                                                       |
 | `["landscape:grid"]`           | `@media (orientation:landscape){.landscape\:grid{display:grid;}}`                                                   |
 | `["portrait:flex-col"]`        | `@media (orientation:portrait){.portrait\:flex-col{flex-direction:column;}}`                                       |
 | `["@container"]`               | `.\@container{container-type:inline-size;}`                                                                         |
@@ -186,12 +226,17 @@ Classes with no matching utility (e.g. your own `card` or `js-toggle`) emit noth
 | `["hover:bg-blue-500"]`        | `.hover\:bg-blue-500:hover{background-color:#3b82f6;}`                                                              |
 | `["bg-[red]"]`                 | `.bg-\[red\]{background-color:red;}`                                                                                |
 | `["bg-(primary)"]`             | `.bg-\(primary\){background-color:var(--primary);}`                                                                 |
+| `["[--offset:12.188rem]"]`     | `.\[--offset\:12\.188rem\]{--offset:12.188rem;}`                                                                    |
+| `["lg:[transition:var(--menu)]"]` | `@media (min-width:1024px){.lg\:\[transition\:var\(--menu\)\]{transition:var(--menu);}}`                         |
+| `["mt-4!"]`                    | `.mt-4\!{margin-top:calc(var(--spacing,0.25rem) * 4) !important;}`                                                  |
 | `["has-[img]:grid"]`           | `.has-\[img\]\:grid:has(img){display:grid;}`                                                                        |
 | `["lg:has-[img]:grid-cols-2"]` | `@media (min-width:1024px){.lg\:has-\[img\]\:grid-cols-2:has(img){grid-template-columns:repeat(2,minmax(0,1fr));}}` |
 | `["has-checked:underline"]`    | `.has-checked\:underline:has(:checked){text-decoration-line:underline;}`                                            |
 | `["group-has-checked:flex"]`   | `.group-has-checked\:flex:is(:where(.group):has(:checked) *){display:flex;}`                                        |
 | `["in-focus:underline"]`       | `:where(:focus) .in-focus\:underline{text-decoration-line:underline;}`                                              |
 | `["peer-invalid:visible"]`     | `.peer-invalid\:visible:is(:where(.peer):invalid ~ *){visibility:visible;}`                                         |
+| `["data-[open]:block"]`        | `.data-\[open\]\:block[data-open]{display:block;}`                                                                  |
+| `["group-data-[open]:block"]`  | `.group-data-\[open\]\:block:is(:where(.group)[data-open] *){display:block;}`                                       |
 
 ---
 

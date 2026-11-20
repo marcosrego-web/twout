@@ -123,18 +123,104 @@ const breakpoints = {
 }
 
 // Variants that wrap the rule in an @media query instead of altering the
-// selector. Breakpoints keep their own map because their condition is built
-// from a width rather than being a fixed feature query.
+// selector. Breakpoints are handled by breakpointVariant because their
+// condition is built from a width rather than being a fixed feature query.
+// `order` places the class in the output - see atRuleVariant.
 const mediaVariants = {
-  dark: "(prefers-color-scheme:dark)",
-  portrait: "(orientation:portrait)",
-  landscape: "(orientation:landscape)"
+  portrait: { query: "(orientation:portrait)", order: [1] },
+  landscape: { query: "(orientation:landscape)", order: [2] },
+  dark: { query: "(prefers-color-scheme:dark)", order: [3] },
+  print: { query: "print", order: [40] }
+}
+
+// Variants that wrap the rule in an at-rule: media features, breakpoints,
+// container queries and arbitrary at-rules. Returns { atRule, order }, or null
+// for a variant that only changes the selector (or isn't one at all).
+//
+// An at-rule adds no specificity, so a variant beats its unprefixed
+// counterpart only by coming later in the output. `order` decides that, the
+// same way for every class whatever order the classes were listed in: base
+// rules first, then
+//   [1] portrait, [2] landscape, [3] dark  (twout's existing order)
+//   [10] max-* breakpoints, widest first   (the narrower query wins)
+//   [20] sm..2xl and min-*, narrowest first (the wider query wins)
+//   [30] container queries: @max-* widest first, then @min-* narrowest first
+//   [40] print
+//   [50] arbitrary at-rules, last as in Tailwind
+// A class with several of these sorts by its most significant one, then the
+// next (Tailwind's variant order works the same way), so md:max-lg:x comes
+// after md:x and before lg:x.
+function atRuleVariant(v) {
+  if (Object.hasOwn(mediaVariants, v))
+    return { atRule: `@media ${mediaVariants[v].query}`, order: mediaVariants[v].order }
+  return breakpointVariant(v) || containerVariant(v) || arbitraryAtRule(v)
+}
+
+// sm..2xl and min-*: (min-width:X). max-* is its exact complement - Tailwind
+// 4's "width < X", written as "not all and (min-width:X)" as Tailwind's own
+// output is once its minifier runs - so max-lg: stops where lg: starts and
+// the two never both apply at exactly 1024px. Arbitrary widths sort among
+// the named ones by their size in px (rem and em counting 16px); one that
+// can't be measured, such as calc(), goes last in its group.
+function breakpointVariant(v) {
+  let token = v
+  let max = false
+  if (v.startsWith("max-") || v.startsWith("min-")) {
+    max = v.startsWith("max-")
+    token = v.slice(4)
+  } else if (!Object.hasOwn(breakpoints, v)) return null
+
+  let width = null
+  if (token.startsWith("[") && token.endsWith("]")) {
+    const value = decodeArbitraryValue(token.slice(1, -1)).trim()
+    if (value && isValidArbitrary(value)) width = value
+  } else if (Object.hasOwn(breakpoints, token)) width = breakpoints[token]
+  if (!width) return null
+
+  const px = lengthToPx(width)
+  return max
+    ? { atRule: `@media not all and (min-width:${width})`, order: [10, px === null ? Infinity : -px] }
+    : { atRule: `@media (min-width:${width})`, order: [20, px === null ? Infinity : px] }
+}
+
+// [@media(max-width:1024px)], [@supports(display:grid)], [@media_print]: the
+// at-rule is written out as given, with underscores read as spaces and a
+// space added after the at-rule's name. Only at-rules that can hold a style
+// rule are accepted. Simple max-width/min-width queries are ordered like the
+// breakpoints, narrower max-width and wider min-width winning, so a legacy
+// "@media (max-width:991px)" and "(max-width:767px)" cascade as they did in
+// the stylesheet they came from; any other at-rule keeps its listed place.
+// (Tailwind orders arbitrary variants by their text instead, which puts
+// 991px after 767px.)
+const groupingAtRules = new Set([
+  "media",
+  "supports",
+  "container",
+  "layer",
+  "scope",
+  "starting-style"
+])
+function arbitraryAtRule(v) {
+  if (!v.startsWith("[@") || !v.endsWith("]")) return null
+  const inner = decodeArbitraryValue(v.slice(1, -1)).trim()
+  if (!isValidArbitrary(inner)) return null
+  const m = inner.match(/^@([a-z-]+)\s*([\s\S]*)$/i)
+  if (!m || !groupingAtRules.has(m[1].toLowerCase())) return null
+  const prelude = m[2].trim()
+
+  const width = prelude.match(/^\(\s*(max|min)-width\s*:\s*([^()\s]+)\s*\)$/i)
+  const px = width && m[1].toLowerCase() === "media" ? lengthToPx(width[2]) : null
+  return {
+    atRule: prelude ? `@${m[1]} ${prelude}` : `@${m[1]}`,
+    order:
+      px === null ? [50, 2] : width[1].toLowerCase() === "max" ? [50, 0, -px] : [50, 1, px]
+  }
 }
 
 // Container query variants: @md, @min-md, @max-md, @min-[475px], @max-[960px]
 // and @[475px], each optionally aimed at a named container with "/name"
 // (@md/main). Their sizes are the containerSizes scale. Returns the at-rule
-// prelude plus what the ordering pass needs, or null for anything else.
+// prelude and its place in the output, or null for anything else.
 // Range syntax gives @max-* Tailwind's strict "<", which max-width can't.
 function containerVariant(v) {
   if (!v.startsWith("@")) return null
@@ -154,15 +240,25 @@ function containerVariant(v) {
   else if (Object.hasOwn(containerSizes, token)) width = containerSizes[token]
   if (!width || (name && !/^[\w-]+$/.test(name))) return null
 
+  // @max-* widest first, then @min-* narrowest first.
+  const px = lengthToPx(width)
   return {
     atRule: `@container ${name ? `${name} ` : ""}(width${max ? "<" : ">="}${width})`,
-    max,
-    px: lengthToPx(width)
+    order: [30, max ? 0 : 1, px === null ? Infinity : max ? -px : px]
   }
 }
 
-// rem/em count as 16px - enough to sort container sizes against each other.
-// Anything else (calc(), %) has no fixed size and returns null.
+// Compares two order keys (arrays of numbers) item by item; a key that is a
+// prefix of the other comes first.
+function compareKeys(a, b) {
+  for (let i = 0; i < Math.min(a.length, b.length); i++)
+    if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1
+  return a.length - b.length
+}
+
+// rem/em count as 16px - enough to sort breakpoints and container sizes
+// against each other. Anything else (calc(), %) has no fixed size and
+// returns null.
 function lengthToPx(value) {
   const m = value.match(/^(\d*\.?\d+)(px|rem|em)$/)
   if (!m) return null
@@ -764,6 +860,15 @@ function decodeArbitraryValue(value, keepQuoted = false) {
       i = j
       continue
     }
+    // A custom property's name may hold underscores - var(--brand_color) -
+    // so, as in Tailwind, only var()'s fallback has them read as spaces.
+    if (value.startsWith("var(", i) && !/[\w-]/.test(value[i - 1] ?? "")) {
+      const end = value.slice(i + 4).search(/[,)]/)
+      const name = end === -1 ? value.slice(i + 4) : value.slice(i + 4, i + 4 + end)
+      out += "var(" + name.replaceAll("\\_", "_")
+      i += 4 + name.length
+      continue
+    }
     if (value[i] === "\\" && value[i + 1] === "_") {
       out += "_"
       i += 2
@@ -781,6 +886,33 @@ function decodeArbitraryValue(value, keepQuoted = false) {
 }
 
 const decodeArbitrarySelector = value => decodeArbitraryValue(value, true)
+
+// False for an arbitrary value that would break out of the rule it is written
+// into: a "{" or "}", a ";" outside any brackets, quotes or brackets left
+// open, or a closing bracket with nothing to close. Tailwind drops such
+// classes too. A ";" inside url() or quotes is fine.
+function isValidArbitrary(value) {
+  const closers = []
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i]
+    if (ch === "\\") {
+      i++
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      while (++i < value.length && value[i] !== ch) if (value[i] === "\\") i++
+      if (i >= value.length) return false
+      continue
+    }
+    if (ch === "{" || ch === "}") return false
+    if (ch === "(") closers.push(")")
+    else if (ch === "[") closers.push("]")
+    else if (ch === ")" || ch === "]") {
+      if (closers.pop() !== ch) return false
+    } else if (ch === ";" && closers.length === 0) return false
+  }
+  return closers.length === 0
+}
 
 const getArbitrary = (cls, bracket) => {
   const re = bracket === "[" ? /\[(.*?)\]/ : /\((.*?)\)/
@@ -1065,6 +1197,7 @@ function stateFragment(v) {
   let m = v.match(/^nth-(\d+)$/)
   if (m) return `:nth-child(${m[1]})`
   if ((m = v.match(/^nth-last-(\d+)$/))) return `:nth-last-child(${m[1]})`
+  if (v.startsWith("data-")) return dataAttributeFragment(v.slice(5))
 
   const bracket = bracketVariantFragment(v)
   if (bracket) return bracket
@@ -1081,6 +1214,29 @@ function stateFragment(v) {
     return inner && !inner.includes(":has(") ? `:has(${inner})` : null
   }
   return relativeVariantSelector(v)
+}
+
+// data-open, data-[open], data-[state=open]: the element has that data
+// attribute (with that value). Returns the attribute selector, or null for a
+// name that isn't a valid attribute name - data-[a_b] would be "data-a b".
+function dataAttributeFragment(token) {
+  let attr = token
+  if (token.startsWith("[") && token.endsWith("]"))
+    attr = decodeArbitrarySelector(token.slice(1, -1)).trim()
+  const m = attr.match(/^([\w-]+)(?:([~|^$*]?=)([\s\S]+))?$/)
+  if (!m || (m[3] && !isValidArbitrary(m[3]))) return null
+  if (!m[3]) return `[data-${m[1]}]`
+  return `[data-${m[1]}${m[2]}${quoteAttributeValue(m[3])}]`
+}
+
+// An unquoted attribute value must be an identifier, so data-[size=2] needs
+// [data-size="2"]. Values are quoted as Tailwind quotes them; one already in
+// quotes is kept, and a trailing " i" or " s" flag stays outside the quotes.
+function quoteAttributeValue(value) {
+  if (value[0] === '"' || value[0] === "'") return value
+  const flag = value.match(/^(.+) ([iIsS])$/)
+  const quote = v => `"${v.replace(/"/g, '\\"')}"`
+  return flag ? `${quote(flag[1])} ${flag[2]}` : quote(value)
 }
 
 // in-* variants style an element while any ancestor is in a state or matches
@@ -1174,13 +1330,9 @@ const wrapVariants = (selector, rule, variants, suffix = "") => {
   let sel = selector
 
   for (const v of variants) {
-    const container = containerVariant(v)
-    if (container) {
-      atRules.push(container.atRule)
-      continue
-    }
-    if (Object.hasOwn(breakpoints, v) || Object.hasOwn(mediaVariants, v)) {
-      atRules.push(`@media ${mediaVariants[v] || `(min-width:${breakpoints[v]})`}`)
+    const atRule = atRuleVariant(v)
+    if (atRule) {
+      atRules.push(atRule.atRule)
       continue
     }
     if (Object.hasOwn(pseudoMap, v)) {
@@ -1358,10 +1510,48 @@ function applyFlag(rule, isNegative, isImportant) {
 
   // Handle !important
   if (isImportant) {
-    out = out.replace(/;/g, " !important;")
+    out = markImportant(out)
   }
 
   return out
+}
+
+// Adds !important to every declaration of a rule. Only a ";" outside
+// brackets and quotes ends one: url(data:image/svg+xml;base64,...) keeps its
+// own.
+function markImportant(rule) {
+  let out = ""
+  let depth = 0
+  for (let i = 0; i < rule.length; i++) {
+    const ch = rule[i]
+    if (ch === '"' || ch === "'") {
+      const start = i
+      while (++i < rule.length && rule[i] !== ch) if (rule[i] === "\\") i++
+      out += rule.slice(start, i + 1)
+      continue
+    }
+    if (ch === "(" || ch === "[") depth++
+    else if (ch === ")" || ch === "]") depth--
+    out += ch === ";" && depth === 0 ? " !important;" : ch
+  }
+  return out
+}
+
+// [property:value]: any CSS property, custom properties included -
+// [--offset:12rem], [transition:var(--menu)]. The value is decoded like other
+// arbitrary values (underscores read as spaces); the property is kept as
+// written. Returns "" for anything else, including a value that would break
+// out of its rule, so such a class emits nothing, as in Tailwind.
+function arbitraryProperty(b) {
+  if (!b.startsWith("[") || !b.endsWith("]")) return ""
+  const inner = b.slice(1, -1)
+  const colon = inner.indexOf(":")
+  if (colon === -1) return ""
+  const property = inner.slice(0, colon)
+  if (!/^(?:--[\w-]+|-?[a-z][a-z0-9-]*)$/.test(property)) return ""
+  const value = decodeArbitraryValue(inner.slice(colon + 1)).trim()
+  if (!value || !isValidArbitrary(value)) return ""
+  return `${property}:${value};`
 }
 
 function smartSplit(input) {
@@ -2957,6 +3147,32 @@ const handlers = [
   }
 ]
 
+// Splits a class into its variants and utility and reads the important and
+// negative flags. twout has always taken them in front of the whole class -
+// !lg:mt-0, -mt-4, !-mt-4. Tailwind writes them on the utility instead:
+// lg:-mt-4, important as a suffix (lg:mt-0!) or, its legacy form, as a
+// prefix (lg:!mt-0). Both are read.
+function parseClass(raw) {
+  const lead = raw.match(/^(?:!-|-!|!|-)/)?.[0] ?? ""
+  let isImportant = lead.includes("!")
+  let isNegative = lead.includes("-")
+  const variants = smartSplit(raw.slice(lead.length))
+  let base = variants.pop() ?? ""
+
+  if (base.endsWith("!")) {
+    isImportant = true
+    base = base.slice(0, -1)
+  } else if (base.startsWith("!")) {
+    isImportant = true
+    base = base.slice(1)
+  }
+  if (!isNegative && base.startsWith("-")) {
+    isNegative = true
+    base = base.slice(1)
+  }
+  return { variants, base, isImportant, isNegative }
+}
+
 // ---- main ----
 // options.onWarning(warning) receives what twout flags while compiling -
 // { type, className, message, ... } - instead of it going to console.warn:
@@ -2971,93 +3187,44 @@ export default function Twout(classes, options = {}) {
   const warn =
     typeof options?.onWarning === "function" ? options.onWarning : printWarning
 
-  // Normalize classes: dedupe and reorder by variant groups.
-  // An @media wrapper adds no specificity, so a variant beats its unprefixed
-  // counterpart only by being emitted later. Emitting in Tailwind's variant
-  // order - none, orientation, dark, then breakpoints - makes the winner
-  // independent of the order the caller listed the classes in.
-  const variantOrder = [
-    "",
-    "portrait:",
-    "landscape:",
-    "dark:",
-    "sm:",
-    "md:",
-    "lg:",
-    "xl:",
-    "2xl:"
-  ]
-
+  // Dedupe, then put the classes in output order: base rules first, then
+  // each class by its at-rule variants wherever they sit in it (see
+  // atRuleVariant), so the cascade doesn't depend on the order the caller
+  // listed the classes in. Ties keep their listed order.
   const seen = new Set()
-  const groups = {
-    "": [],
-    "portrait:": [],
-    "landscape:": [],
-    "dark:": [],
-    "sm:": [],
-    "md:": [],
-    "lg:": [],
-    "xl:": [],
-    "2xl:": []
-  }
-
-  // Container queries come after the breakpoints, as in Tailwind: @max-* from
-  // widest to narrowest, then @min-* from narrowest to widest, so the tighter
-  // query wins. Their sizes are open-ended (@min-[475px]), so they are sorted
-  // by width rather than kept in fixed groups. An unmeasurable size such as
-  // calc() keeps its listed place at the end of its group.
-  const containerClasses = []
-
+  const entries = []
   ;(classes || []).forEach(c => {
     if (!c) return
     const raw = String(c)
     if (seen.has(raw)) return
     seen.add(raw)
-    const lead = raw.startsWith("@") ? smartSplit(raw) : []
-    const container = lead.length > 1 && containerVariant(lead[0])
-    if (container) {
-      containerClasses.push({ raw, ...container })
-      return
+    const parsed = parseClass(raw)
+    const order = parsed.variants
+      .map(v => atRuleVariant(v)?.order)
+      .filter(Boolean)
+      .sort((a, b) => compareKeys(b, a))
+    entries.push({ raw, parsed, order })
+  })
+  entries.sort((a, b) => {
+    for (let i = 0; i < Math.min(a.order.length, b.order.length); i++) {
+      const d = compareKeys(a.order[i], b.order[i])
+      if (d) return d
     }
-    // Identify the leading variant (first part ending with ':') when it names
-    // one of the groups we order.
-    const m = raw.match(/^([a-z0-9-]+:)/i)
-    const prefix = m && variantOrder.includes(m[1]) ? m[1] : ""
-    groups[prefix].push(raw)
+    return a.order.length - b.order.length
   })
 
-  const containerRank = c =>
-    c.px === null ? Number.MAX_VALUE : c.max ? -c.px : c.px
-  containerClasses.sort(
-    (a, b) => b.max - a.max || containerRank(a) - containerRank(b)
-  )
-
-  const normalizedClasses = [
-    ...variantOrder.flatMap(v => groups[v] || []),
-    ...containerClasses.map(c => c.raw)
-  ]
-
-  normalizedClasses.forEach(raw => {
-    let isImportant =
-      raw.startsWith("!") || raw.startsWith("!-") || raw.startsWith("-!")
-    let isNegative =
-      raw.startsWith("-") || raw.startsWith("!-") || raw.startsWith("-!")
-    const baseRaw =
-      isImportant && isNegative
-        ? raw.slice(2)
-        : isImportant || isNegative
-        ? raw.slice(1)
-        : raw
-
-    const parts = smartSplit(baseRaw) //Previous version: const parts = baseRaw.split(":");
-    const base = parts.pop()
-    const variants = parts
+  entries.forEach(({ raw, parsed }) => {
+    const { variants, base, isImportant, isNegative } = parsed
 
     const selector = escapeClass(raw) // keep '-' in class name
 
     // A handler returns declarations, or { suffix, rule } when the utility
     // styles the element's children (space-x-*) rather than the element.
+    // [property:value] has nothing to negate, so -[...] emits nothing, as in
+    // Tailwind.
     const resolve = b => {
+      const property = arbitraryProperty(b)
+      if (property) return isNegative ? null : { suffix: "", rule: property }
       for (const h of handlers) {
         const r = h(b)
         if (r) return typeof r === "string" ? { suffix: "", rule: r } : r
