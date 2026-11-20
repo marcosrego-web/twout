@@ -284,6 +284,10 @@ describe("unsupported variants", () => {
     // Object.prototype keys aren't variants either.
     expectSkipped("constructor:underline", "constructor")
     expectSkipped("toString:underline", "toString")
+    // A stray colon leaves an empty variant, which used to throw.
+    expectSkipped(":underline", "")
+    expectSkipped("hover::underline", "")
+    expectSkipped("::before:underline", "")
   })
 
   test("the warning names the class and variant", () => {

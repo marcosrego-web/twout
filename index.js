@@ -3266,12 +3266,16 @@ export default function Twout(classes, options = {}) {
 
     rule = applyFlag(rule, isNegative, isImportant)
     const out = wrapVariants(selector, rule, variants, suffix)
-    if (out.unsupported) {
+    // "in", not a truthy check: a stray colon (":flex", "hover::flex") leaves
+    // an empty variant, and "" must be skipped like any other unknown one.
+    if ("unsupported" in out) {
       warn({
         type: "unsupported-variant",
         className: raw,
         variant: out.unsupported,
-        message: `Skipped "${raw}": twout doesn't support the "${out.unsupported}:" variant, so it generated no CSS for this class.`
+        message: out.unsupported
+          ? `Skipped "${raw}": twout doesn't support the "${out.unsupported}:" variant, so it generated no CSS for this class.`
+          : `Skipped "${raw}": it has an empty variant (a stray ":"), so twout generated no CSS for this class.`
       })
       ;[...usedKeyframes]
         .slice(keyframesBefore)
